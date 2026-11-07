@@ -32,6 +32,7 @@ import {
 } from "./storage";
 import { busy, fileName, formatTime } from "./media";
 import CameraView from "./CameraView";
+import { useInstallOffer } from "./useInstallOffer";
 
 const starter = {
   id: "welcome",
@@ -142,9 +143,9 @@ export default function App() {
     [recordState, setRecordState] = useState("idle"),
     [notice, setNotice] = useState(""),
     [storage, setStorage] = useState({}),
-    [install, setInstall] = useState(null),
     [newTag, setNewTag] = useState(""),
     [rename, setRename] = useState("");
+  const installOffer = useInstallOffer();
   const revision = useRef(0),
     pendingWrites = useRef(new Set()),
     settingsRef = useRef(defaults);
@@ -185,14 +186,8 @@ export default function App() {
     storageStatus()
       .then(setStorage)
       .catch(() => {});
-    const handler = (e) => {
-      e.preventDefault();
-      setInstall(e);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
     return () => {
       mounted = false;
-      window.removeEventListener("beforeinstallprompt", handler);
     };
   }, []);
   useEffect(() => {
@@ -853,21 +848,16 @@ export default function App() {
                 Quality adapts to your camera. Saved footage is never mirrored.
                 Select a specific camera in the studio controls.
               </p>
-              {install ? (
-                <button
-                  className="gold-button full"
-                  onClick={async () => {
-                    await install.prompt();
-                    setInstall(null);
-                  }}
-                >
-                  Install Callista
-                </button>
-              ) : (
-                <p className="fine-print">
-                  Install from your browser menu. On iPhone: Share → Add to Home
-                  Screen.
-                </p>
+              {installOffer && (
+                <section aria-label="App installation">
+                  {installOffer.install ? (
+                    <button className="gold-button full" onClick={installOffer.install}>
+                      Install App
+                    </button>
+                  ) : (
+                    <p className="fine-print">{installOffer.instructions}</p>
+                  )}
+                </section>
               )}
               <p className="fine-print settings-version">
                 Version {version.replace(/^(\d+\.\d+)\.0$/, "$1")}
