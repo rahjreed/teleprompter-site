@@ -20,20 +20,23 @@ test("reading panel stays clear of camera controls on a short phone screen and r
   await expect(page.getByRole('slider', { name: /Panel position/ })).toHaveValue('25');
 });
 
-test("export contains unmirrored camera pixels and no interface or prompter pixels", async ({
+for (const dimensions of [{ width: 360, height: 640 }, { width: 640, height: 480 }, { width: 640, height: 360 }]) {
+test(`export preserves full ${dimensions.width}x${dimensions.height} camera view without mirroring or interface pixels`, async ({
   page,
 }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript(({ width, height }) => {
     navigator.mediaDevices.getUserMedia = async () => {
       const canvas = document.createElement("canvas");
-      canvas.width = 360;
-      canvas.height = 640;
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext("2d");
       function draw() {
         ctx.fillStyle = "#205030";
-        ctx.fillRect(0, 0, 180, 640);
+        ctx.fillRect(0, 0, width / 2, height);
         ctx.fillStyle = "#502060";
-        ctx.fillRect(180, 0, 180, 640);
+        ctx.fillRect(width / 2, 0, width / 2, height);
+        ctx.fillStyle = '#641414'; ctx.fillRect(0, 0, width * .08, height);
+        ctx.fillStyle = '#141478'; ctx.fillRect(width * .92, 0, width * .08, height);
         requestAnimationFrame(draw);
       }
       draw();
@@ -48,7 +51,7 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
       window.testCamera = { canvas, audio, oscillator, stream };
       return stream;
     };
-  });
+  }, dimensions);
   await page.goto("/");
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
@@ -56,6 +59,7 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
     page.getByRole("button", { name: "Start recording", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".camera-preview")).toHaveClass(/mirrored/);
+  await expect(page.locator(".camera-preview")).toHaveCSS('object-fit', 'contain');
   await expect(page.locator(".prompter-scroll")).toContainText(
     "You have something worth sharing.",
   );
@@ -65,7 +69,7 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
     c.height = v.videoHeight;
     const x = c.getContext("2d");
     x.drawImage(v, 0, 0);
-    return Array.from(x.getImageData(30, 30, 1, 1).data);
+    return Array.from(x.getImageData(Math.round(v.videoWidth * .25), Math.round(v.videoHeight / 2), 1, 1).data);
   });
   expect(sourcePixel[1]).toBeGreaterThan(60);
   await page
@@ -96,7 +100,7 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       const at = (x) =>
         Array.from(
-          ctx.getImageData(Math.round(canvas.width * x), 30, 1, 1).data,
+          ctx.getImageData(Math.round(canvas.width * x), Math.round(canvas.height / 2), 1, 1).data,
         );
       let brightest = 0;
       for (let i = 0; i < data.length; i += 4)
@@ -104,6 +108,8 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
       return {
         left: at(0.25),
         right: at(0.75),
+        leftEdge: at(.02),
+        rightEdge: at(.98),
         brightest,
         width: video.videoWidth,
         height: video.videoHeight,
@@ -118,9 +124,12 @@ test("export contains unmirrored camera pixels and no interface or prompter pixe
   expect(result.left[1]).toBeGreaterThan(result.left[0] + 20);
   expect(result.right[2]).toBeGreaterThan(result.right[1] + 20);
   expect(result.brightest).toBeLessThan(140);
-  expect(result.width).toBe(360);
-  expect(result.height).toBe(640);
+  expect(result.leftEdge[0]).toBeGreaterThan(result.leftEdge[1] + 40);
+  expect(result.rightEdge[2]).toBeGreaterThan(result.rightEdge[0] + 60);
+  expect(result.width / result.height).toBeCloseTo(9 / 16, 3);
+  if (dimensions.width === 360) { expect(result.width).toBe(360); expect(result.height).toBe(640); }
 });
+}
 
 test("interruption stops and saves the current take; leaving releases devices", async ({
   page,

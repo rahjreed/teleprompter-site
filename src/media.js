@@ -46,33 +46,47 @@ export async function requestCamera(
     throw new Error(
       "Camera access needs HTTPS and a supported browser. Use HTTPS or localhost.",
     );
-  const width = Number(settings.quality),
-    height = Math.round((width * 16) / 9);
+  // Ask for detail without imposing an aspect ratio on the camera sensor.
+  // A forced 9:16 track can be a severe digital crop of a native 4:3/16:9 camera.
+  const longEdge = Math.round((Number(settings.quality) * 16) / 9);
   const selection = settings.deviceId
     ? { deviceId: { exact: settings.deviceId } }
     : { facingMode: { ideal: settings.facing } };
   try {
-    return await devices.getUserMedia({
+    return await resetCameraZoom(await devices.getUserMedia({
       audio: true,
       video: {
         ...selection,
-        width: { ideal: width },
-        height: { ideal: height },
-        aspectRatio: { ideal: 9 / 16 },
+        width: { ideal: longEdge },
+        height: { ideal: longEdge },
+        resizeMode: { exact: "none" },
         frameRate: { ideal: 30, max: 30 },
       },
-    });
+    }));
   } catch (error) {
     if (error.name !== "OverconstrainedError") throw error;
-    return devices.getUserMedia({
+    return resetCameraZoom(await devices.getUserMedia({
       audio: true,
       video: {
         facingMode: { ideal: settings.facing },
-        width: { ideal: 720 },
+        width: { ideal: 1280 },
         height: { ideal: 1280 },
+        resizeMode: { ideal: "none" },
       },
-    });
+    }));
   }
+}
+async function resetCameraZoom(stream) {
+  const track = stream.getVideoTracks?.()[0];
+  try {
+    const zoom = track?.getCapabilities?.().zoom;
+    if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max)) {
+      await track.applyConstraints({ advanced: [{ zoom: Math.max(zoom.min, Math.min(1, zoom.max)) }] });
+    }
+  } catch {
+    // Zoom controls are optional. Keep the usable native stream if unsupported or denied.
+  }
+  return stream;
 }
 // Draw only camera pixels, with no CSS mirroring, text, or interface controls.
 export function portraitStream(video, source, quality) {
@@ -85,28 +99,33 @@ export function portraitStream(video, source, quality) {
     return { stream: source, cleanup() {}, width: sw, height: sh };
   const height = Math.min(
     Math.round((Number(quality) * 16) / 9),
-    sh,
-    Math.floor((sw * 16) / 9),
+    Math.max(sh, Math.floor((sw * 16) / 9)),
   );
-  canvas.height = Math.floor(height / 16) * 16;
+  // Even dimensions keep H.264 encoders compatible at fallback resolutions.
+  canvas.height = Math.floor(height / 32) * 32;
   canvas.width = (canvas.height * 9) / 16;
   const context = canvas.getContext("2d", { alpha: false });
-  const cropW = Math.min(sw, (sh * 9) / 16),
-    cropH = (cropW * 16) / 9;
   let frame,
     last = 0;
   function draw(time) {
     if (time - last >= 1000 / 30 || !last) {
+      // Fit the entire camera frame into the portrait export, rather than zooming
+      // into its center. Recompute for cameras that rotate their native stream.
+      const sourceWidth = video.videoWidth || sw, sourceHeight = video.videoHeight || sh;
+      const scale = Math.min(canvas.width / sourceWidth, canvas.height / sourceHeight);
+      const width = sourceWidth * scale, height = sourceHeight * scale;
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, canvas.width, canvas.height);
       context.drawImage(
         video,
-        (sw - cropW) / 2,
-        (sh - cropH) / 2,
-        cropW,
-        cropH,
         0,
         0,
-        canvas.width,
-        canvas.height,
+        sourceWidth,
+        sourceHeight,
+        (canvas.width - width) / 2,
+        (canvas.height - height) / 2,
+        width,
+        height,
       );
       last = time;
     }

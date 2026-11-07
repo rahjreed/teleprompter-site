@@ -22,7 +22,7 @@ Optional WebKit checks: `npx playwright install webkit`, then `npm run test:webk
 
 - Requests camera and microphone after tapping Enable. Starts with the front camera; device selection follows permission grant.
 - Negotiates a supported MediaRecorder MIME type or lets the browser select its default. Files use the actual container extension.
-- Requests 1080 × 1920 (or 720 × 1280). A camera-only canvas center-crops to 9:16, capped at the available source resolution to avoid upscaling. Audio tracks are added directly from the microphone. Neither the text nor controls are drawn to the canvas. CSS mirrors only the preview.
+- Requests a native camera frame without forcing a portrait sensor crop and resets zoom to 1× where supported. The preview fits the entire frame. A camera-only canvas fits that same full view into a 1080 × 1920 (or 720 × 1280) portrait export, with lower-resolution fallback and black padding when the native aspect ratio differs. Audio tracks are added directly from the microphone. Neither the text nor controls are drawn to the canvas. CSS mirrors only the preview.
 - If canvas capture is unsupported, records the original camera stream and warns when portrait capture is unavailable. Actual dimensions are read back from the exported blob, shown as verified only when decoded successfully.
 - Countdown can be canceled. Scrolling can be paused independently. Recording stops and keeps available chunks when the app is backgrounded or a track disconnects. Screen wake lock is best-effort.
 - Navigation is disabled during countdown, recording, and saving; browser unload is guarded. Browser/OS termination can still prevent final media delivery.

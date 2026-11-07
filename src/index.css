@@ -899,7 +899,8 @@ select {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #020617;
   aspect-ratio: 9/16;
 }
 .camera-preview.mirrored {
