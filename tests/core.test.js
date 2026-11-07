@@ -57,7 +57,7 @@ test("MIME negotiation uses browser support and falls back to browser default", 
   assert.equal(supportedMime({ isTypeSupported: () => false }), "");
   assert.throws(() => supportedMime(null), /not supported/);
 });
-test("permissions are requested for both microphone and portrait camera", async () => {
+test("camera requests retain the native field of view and microphone audio", async () => {
   let constraints;
   const result = await requestCamera(
     { quality: "1080", facing: "user" },
@@ -71,8 +71,19 @@ test("permissions are requested for both microphone and portrait camera", async 
   assert.equal(result, "stream");
   assert.equal(constraints.audio, true);
   assert.equal(constraints.video.height.ideal, 1920);
-  assert.equal(constraints.video.width.ideal, 1080);
+  assert.equal(constraints.video.width.ideal, 1920);
+  assert.equal(constraints.video.aspectRatio, undefined);
+  assert.deepEqual(constraints.video.resizeMode, { exact: 'none' });
   assert.equal(constraints.video.facingMode.ideal, "user");
+});
+test("camera zoom resets to 1x when supported and tolerates unsupported zoom", async () => {
+  const applied = [];
+  const track = { getCapabilities: () => ({ zoom: { min: 1, max: 8 } }), applyConstraints: async constraints => applied.push(constraints) };
+  const stream = { getVideoTracks: () => [track] };
+  assert.equal(await requestCamera({ quality: '1080', facing: 'user' }, { getUserMedia: async () => stream }), stream);
+  assert.deepEqual(applied, [{ advanced: [{ zoom: 1 }] }]);
+  track.applyConstraints = async () => { throw new DOMException('Unsupported', 'NotSupportedError'); };
+  assert.equal(await requestCamera({ quality: '1080', facing: 'user' }, { getUserMedia: async () => stream }), stream);
 });
 test("constraint failure retries lower quality but permission denial does not retry", async () => {
   let calls = 0;
