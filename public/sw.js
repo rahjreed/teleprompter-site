@@ -10,14 +10,21 @@ self.addEventListener("install", (event) => {
       const assets = [
         ...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g),
       ].map((match) => new URL(match[1], base).href);
-      await cache.addAll([
-        ...assets,
-        new URL("manifest.webmanifest", base).href,
-        new URL("icons/icon-192.png", base).href,
-        new URL("icons/icon-512.png", base).href,
-        new URL("icons/icon-maskable.png", base).href,
-        new URL("brand/callista-mark.png", base).href,
-      ]);
+      const brandAssets = [
+        "icon-192.png",
+        "icon-512.png",
+        "icon-maskable.png",
+        "apple-touch-icon.png",
+        "favicon.svg",
+        "mascot.svg",
+      ].map((file) => new URL(`brand/prompterson/${file}`, base).href);
+      await cache.addAll(
+        [
+          ...assets,
+          new URL("manifest.webmanifest", base).href,
+          ...brandAssets,
+        ].map((url) => new Request(url, { cache: "reload" })),
+      );
       await cache.put(base, response);
     })(),
   );

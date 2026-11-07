@@ -45,7 +45,7 @@ export const defaults = {
   size: 32,
   speed: 32,
   opacity: 55,
-  position: 5,
+  position: 0,
   alignment: "center",
   countdown: 3,
   mirror: true,

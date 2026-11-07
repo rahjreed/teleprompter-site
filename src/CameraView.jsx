@@ -26,10 +26,11 @@ import {
   measureMicrophone,
 } from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
+import { attribution, mascot, productName, tagline } from "./brand";
 
 // Keep the persisted 0–25 slider scale while allowing a wider physical range.
 const POSITION_MAX = 25;
-const PROMPT_TRAVEL = 0.34;
+const PROMPT_TRAVEL = 0.4;
 
 export default function CameraView({
   script,
@@ -61,7 +62,7 @@ export default function CameraView({
     [elapsed, setElapsed] = useState(0),
     [playing, setPlaying] = useState(false),
     [controls, setControls] = useState(false),
-    [position, setPosition] = useState(settings.position ?? 5),
+    [position, setPosition] = useState(settings.position ?? 0),
     [devices, setDevices] = useState([]),
     [resolution, setResolution] = useState(""),
     [front, setFront] = useState(true);
@@ -604,24 +605,13 @@ export default function CameraView({
       {!source.current && (
         <div className="camera-intro">
           <span className="camera-intro-icon">
-            <img
-              src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
-              alt="Callista Digital"
-            />
+            <img src={mascot} alt="Mr. Prompterson" />
           </span>
-          <p className="eyebrow">A LITTLE PREP. A GREAT TAKE.</p>
-          <h1>
-            Ready when
-            <br />
-            you are<span>.</span>
-          </h1>
-          <p>
-            Your script stays near the lens.
-            <br />
-            Your words stay out of the video.
-          </p>
+          <p className="eyebrow">{attribution}</p>
+          <h1>{productName}</h1>
+          <p>{tagline}</p>
           <button
-            className="gold-button"
+            className="primary-button"
             onClick={() => enable()}
             disabled={state === "requesting"}
           >

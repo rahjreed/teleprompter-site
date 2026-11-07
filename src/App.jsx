@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   HardDrive,
+  Info,
   MoreHorizontal,
   Plus,
   Search,
@@ -33,12 +34,19 @@ import {
 import { busy, fileName, formatTime } from "./media";
 import CameraView from "./CameraView";
 import { useInstallOffer } from "./useInstallOffer";
+import {
+  attribution,
+  mascot,
+  productIcon,
+  productName,
+  tagline,
+} from "./brand";
 
 const starter = {
   id: "welcome",
   title: "Your first great take",
   content:
-    "You have something worth sharing.\n\nTake a breath. Look into the lens. And talk to one person.\n\nWith Callista, your words are right where you need them. No memorizing. No starting over because you lost your place.\n\nMake this script your own, find your pace, and press record.\n\nShow up as yourself. We’ll keep the words moving.",
+    "You have something worth sharing.\n\nTake a breath. Look into the lens. And talk to one person.\n\nWith Mr. Prompterson, your words are right where you need them. No memorizing. No starting over because you lost your place.\n\nMake this script your own, find your pace, and press record.\n\nShow up as yourself. We’ll keep the words moving.",
   tags: ["Personal"],
   updated: 0,
 };
@@ -151,7 +159,7 @@ export default function App() {
   const installOffer = useInstallOffer();
   const [diagnostics, setDiagnostics] = useState({});
   function recordDiagnostics(section, details) {
-    console.info("[Callista recording]", section, details);
+    console.info(`[${productName} recording]`, section, details);
     setDiagnostics((previous) =>
       section === "error"
         ? {
@@ -339,12 +347,11 @@ export default function App() {
               navigate("scripts");
             }}
           >
-            <img
-              className="brand-logo"
-              src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
-              alt=""
-            />
-            <span className="brand-name">CALLISTA DIGITAL</span>
+            <img className="brand-logo" src={productIcon} alt="" />
+            <span className="brand-wordmark">
+              <span className="brand-name">{productName}</span>
+              <small>{attribution}</small>
+            </span>
           </a>
           <div className="brand-right">
             <span className="local-badge">
@@ -367,18 +374,37 @@ export default function App() {
               <h1>
                 Your scripts<span>.</span>
               </h1>
-              <p className="subtitle">
-                A little preparation. A more natural you.
-              </p>
+              <p className="subtitle">{tagline}</p>
             </div>
             <button
-              className="gold-button desktop-create"
+              className="primary-button desktop-create"
               disabled={!storageReady}
               onClick={createScript}
             >
               <Plus size={18} /> New script
             </button>
           </div>
+          {ready &&
+            !search &&
+            !tag &&
+            scripts.every((script) => script.id === starter.id) && (
+              <section
+                className="product-welcome"
+                aria-label={`Welcome to ${productName}`}
+              >
+                <div>
+                  <p className="brand-kicker">Your video teleprompter</p>
+                  <h2>Meet {productName}</h2>
+                  <p>
+                    Put your script by the lens and record at your own pace.
+                  </p>
+                </div>
+                <img
+                  src={mascot}
+                  alt="Mr. Prompterson, your recording assistant"
+                />
+              </section>
+            )}
           <div className="library-toolbar">
             <label className="search">
               <Search size={20} />
@@ -576,7 +602,7 @@ export default function App() {
               <h2>Your story starts with a take.</h2>
               <p>Record with a script. Find your videos here.</p>
               <button
-                className="gold-button"
+                className="primary-button"
                 onClick={() => navigate("camera")}
               >
                 <Camera size={18} /> Open camera
@@ -753,7 +779,7 @@ export default function App() {
             </button>
           </div>
           <button
-            className="gold-button full"
+            className="primary-button full"
             disabled={saveState !== "Saved on this device"}
             onClick={() => {
               setSelected(editor.id);
@@ -770,6 +796,7 @@ export default function App() {
           title={
             {
               settings: "Make it your studio",
+              about: `About ${productName}`,
               tags: "Organize your scripts",
               choose: "Choose your script",
               actions: "Script options",
@@ -778,7 +805,9 @@ export default function App() {
               delete: "Delete permanently?",
             }[modal.type]
           }
-          close={() => setModal(null)}
+          close={() =>
+            setModal(modal.type === "about" ? { type: "settings" } : null)
+          }
           wide={modal.type === "play"}
         >
           {modal.type === "settings" && (
@@ -913,7 +942,7 @@ export default function App() {
                 <section aria-label="App installation">
                   {installOffer.install ? (
                     <button
-                      className="gold-button full"
+                      className="primary-button full"
                       onClick={installOffer.install}
                     >
                       Install App
@@ -923,9 +952,23 @@ export default function App() {
                   )}
                 </section>
               )}
+              <button
+                className="option-row"
+                onClick={() => setModal({ type: "about" })}
+              >
+                <Info size={18} /> About {productName}
+              </button>
               <p className="fine-print settings-version">
                 Version {version.replace(/^(\d+\.\d+)\.0$/, "$1")}
               </p>
+            </div>
+          )}
+          {modal.type === "about" && (
+            <div className="product-about">
+              <img src={mascot} alt="Illustrated portrait of Mr. Prompterson" />
+              <h3>{productName} — Video Teleprompter</h3>
+              <p>{tagline}</p>
+              <p className="fine-print">{attribution}</p>
             </div>
           )}
           {modal.type === "tags" && (
@@ -949,7 +992,7 @@ export default function App() {
                   onChange={(e) => setNewTag(e.target.value)}
                 />
                 <button
-                  className="gold-button"
+                  className="primary-button"
                   type="submit"
                   disabled={!newTag.trim()}
                 >
@@ -1080,7 +1123,7 @@ export default function App() {
                 />
               </label>
               <button
-                className="gold-button full"
+                className="primary-button full"
                 disabled={!rename.trim()}
                 onClick={async () => {
                   const next = { ...modal.video, title: rename.trim() };
@@ -1177,7 +1220,7 @@ function Playback({ video, download, share }) {
           : "Keep a downloaded copy. Browser data can be cleared."}
       </p>
       <div className="button-pair">
-        <button className="gold-button" onClick={() => download(video)}>
+        <button className="primary-button" onClick={() => download(video)}>
           <Download size={18} />
           Download
         </button>

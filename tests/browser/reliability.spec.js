@@ -56,7 +56,7 @@ test("portrait touch drag reaches the safe top edge, stays stable during recordi
   });
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchMove",
-    touchPoints: [{ x, y: 54 }],
+    touchPoints: [{ x, y: 50 }],
   });
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchEnd",
@@ -65,7 +65,7 @@ test("portrait touch drag reaches the safe top edge, stays stable during recordi
   const prompt = page.locator(".prompter-panel");
   await expect
     .poll(async () => (await prompt.boundingBox()).y)
-    .toBeCloseTo(53, 0);
+    .toBeCloseTo(49, 0);
   await page
     .getByRole("button", { name: "Start recording", exact: true })
     .click();
@@ -83,7 +83,7 @@ test("portrait touch drag reaches the safe top edge, stays stable during recordi
   const transport = await page
     .locator(".active-recording-controls")
     .boundingBox();
-  expect(during.y).toBeCloseTo(53, 0);
+  expect(during.y).toBeCloseTo(49, 0);
   expect(during.y + during.height).toBeLessThan(transport.y);
   expect(transport.y + transport.height).toBeLessThanOrEqual(667 - 34);
   await expect
@@ -108,7 +108,7 @@ test("portrait touch drag reaches the safe top edge, stays stable during recordi
   ).toBeEnabled();
   await expect
     .poll(async () => (await prompt.boundingBox()).y)
-    .toBeCloseTo(53, 0);
+    .toBeCloseTo(49, 0);
   await page.getByRole("button", { name: "Adjust teleprompter" }).click();
   await expect(
     page.getByRole("slider", { name: /Panel position/ }),
@@ -387,7 +387,28 @@ test("settings persist and mobile/desktop layouts fit without horizontal overflo
   page,
 }) => {
   await page.goto("/");
+  await expect(page).toHaveTitle("Mr. Prompterson — Video Teleprompter");
+  await expect(
+    page.getByRole("link", { name: /Mr\. Prompterson By Callista Digital/ }),
+  ).toBeVisible();
+  const welcome = page.getByRole("region", {
+    name: "Welcome to Mr. Prompterson",
+  });
+  await expect(welcome).toBeVisible();
+  await expect
+    .poll(() =>
+      welcome.getByRole("img").evaluate((image) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "About Mr. Prompterson" }).click();
+  const about = page.getByRole("dialog", { name: "About Mr. Prompterson" });
+  await expect(about.getByText("Read it. Record it. Share it.")).toBeVisible();
+  await expect(about.getByText("By Callista Digital")).toBeVisible();
+  await expect(
+    about.getByRole("img", { name: "Illustrated portrait of Mr. Prompterson" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page
     .getByRole("combobox", { name: /Text alignment/ })
     .selectOption("left");
