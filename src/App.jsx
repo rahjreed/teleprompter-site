@@ -21,6 +21,7 @@ import {
   X,
   Share2,
 } from "lucide-react";
+import { version } from "../package.json";
 import {
   defaults,
   filterScripts,
@@ -868,6 +869,9 @@ export default function App() {
                   Screen.
                 </p>
               )}
+              <p className="fine-print settings-version">
+                Version {version.replace(/^(\d+\.\d+)\.0$/, "$1")}
+              </p>
             </div>
           )}
           {modal.type === "tags" && (
