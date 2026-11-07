@@ -22,8 +22,10 @@ Optional WebKit checks: `npx playwright install webkit`, then `npm run test:webk
 
 - Requests camera and microphone after tapping Enable. Starts with the front camera; device selection follows permission grant.
 - Negotiates a supported MediaRecorder MIME type or lets the browser select its default. Files use the actual container extension.
-- Requests a native camera frame without forcing a portrait sensor crop and resets zoom to 1× where supported. The preview fits the entire frame. A camera-only canvas fits that same full view into a 1080 × 1920 (or 720 × 1280) portrait export, with lower-resolution fallback and black padding when the native aspect ratio differs. Audio tracks are added directly from the microphone. Neither the text nor controls are drawn to the canvas. CSS mirrors only the preview.
-- If canvas capture is unsupported, records the original camera stream and warns when portrait capture is unavailable. Actual dimensions are read back from the exported blob, shown as verified only when decoded successfully.
+- Requests a native camera frame at up to 30 FPS and resets zoom to 1× where supported. Standard uses the widest 9:16 view that fills the export. Close-Up crops 1.2× closer and can reduce the export resolution. The preview uses the same crop and mirrors only the selfie display.
+- Records a matching native 9:16 stream directly. When framing or resolution needs adjustment, a single camera-only crop fills the frame without padding or stretching. Cropped exports target 1080 × 1920, then 720 × 1280, then an even lower resolution when the crop has fewer pixels. Original microphone tracks are passed directly to the recorder.
+- Prefers H.264/AAC in MP4 and falls back to a browser-supported format. The encoder targets up to 12 Mbps video and 160 kbps audio. Natural requests minimal browser microphone processing. Voice Cleanup requests echo cancellation, noise suppression, and automatic gain control for comparison.
+- When a browser lacks canvas capture, Standard can still record a compatible native portrait track. Other source sizes need a browser that can crop the track. Actual dimensions are read back from the exported blob and shown as verified only when decoded successfully.
 - Countdown can be canceled. Scrolling can be paused independently. Recording stops and keeps available chunks when the app is backgrounded or a track disconnects. Screen wake lock is best-effort.
 - Navigation is disabled during countdown, recording, and saving; browser unload is guarded. Browser/OS termination can still prevent final media delivery.
 - A take is capped at approximately 400 MB to bound memory. Low-storage checks warn before recording and stop an active take. On quota failure the in-memory blob remains playable and downloadable for the current session.
@@ -33,6 +35,10 @@ Optional WebKit checks: `npx playwright install webkit`, then `npm run test:webk
 Download important videos. Browser data deletion, storage eviction, private browsing, or a device change can remove local data. Persistent-storage requests are optional and browser-controlled. Device sharing falls back to download when file sharing is unavailable.
 
 The production build registers a service worker that caches the complete app shell and built JS/CSS. New workers wait for existing tabs to close to avoid replacing a running studio. Development does not register the worker. Installation requires HTTPS (localhost works for development); iPhone installation uses Share → Add to Home Screen.
+
+## Recording diagnostics
+
+Open the app with `?recordingDiagnostics=1`, record a take, then open **Settings → Recording diagnostics**. The panel and browser console show capture-track settings, the decoded preview and export dimensions, crop size, codec identifiers reported by the recorder, encoder bitrate targets, and the export’s average combined bitrate. The optional level meter samples the microphone while recording and reports peak level, highest window RMS, and near-clipping windows. Use an external file inspector for measured per-stream bitrates and frame timing.
 
 ## Device verification checklist
 

@@ -12,6 +12,9 @@ function manualInstructions(ua, isIOS, isAndroid) {
   }
 
   if (isAndroid) {
+    if (!window.isSecureContext) {
+      return "Open this page over HTTPS in Chrome or Samsung Internet to install the app.";
+    }
     if (/SamsungBrowser\//i.test(ua)) {
       return "In Samsung Internet, tap the + icon in the address bar if shown, or open Menu → Add page to → Home screen.";
     }

@@ -6,7 +6,8 @@ const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.1
 const desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
 
 async function simulateBrowser(page, options) {
-  await page.addInitScript(({ ua, mode = "browser", standalone = false, touches = 0 }) => {
+  await page.addInitScript(({ ua, mode = "browser", standalone = false, touches = 0, insecure = false }) => {
+    if (insecure) Object.defineProperty(window, "isSecureContext", { value: false });
     Object.defineProperties(navigator, {
       userAgent: { configurable: true, value: ua },
       userAgentData: { configurable: true, value: undefined },
@@ -49,6 +50,7 @@ async function openSettings(page) {
 const browserCases = [
   { name: "Android Chrome", ua: android, text: /In Chrome, open More.*Add to Home screen.*Install/ },
   { name: "Samsung Internet", ua: android.replace("Chrome/135", "SamsungBrowser/28.0 Chrome/135"), text: /In Samsung Internet.*Add page to.*Home screen/ },
+  { name: "Android Chrome over HTTP", ua: android, insecure: true, text: /Open this page over HTTPS.*install the app/ },
   { name: "iPhone Safari", ua: iphone, text: /In Safari.*Share.*Add to Home Screen/ },
   { name: "iPad Safari with a desktop user agent", ua: mac, touches: 5, text: /In Safari.*Share.*Add to Home Screen/ },
   { name: "iPhone Chrome", ua: iphone.replace("Version/18.0", "CriOS/135.0.0.0"), text: /In Chrome, tap Share.*Add to Home Screen/ },

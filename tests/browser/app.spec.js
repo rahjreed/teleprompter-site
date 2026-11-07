@@ -54,11 +54,18 @@ test("countdown cancellation, camera+audio recording, portrait export, playback,
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("combobox", { name: "Microphone", exact: true }).selectOption("voice");
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
   await expect(
     page.getByRole("button", { name: "Start recording", exact: true }),
   ).toBeEnabled();
+  const voice = await page.locator(".camera-preview").evaluate((video) => video.srcObject.getAudioTracks()[0].getSettings());
+  expect(voice.echoCancellation).toBe(true);
+  expect(voice.noiseSuppression).toBe(true);
+  expect(voice.autoGainControl).toBe(true);
   await page.screenshot({ path: "test-results/studio-mobile.png" });
   await page
     .getByRole("button", { name: "Start recording", exact: true })
