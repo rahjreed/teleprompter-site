@@ -751,6 +751,11 @@ select {
   flex-direction: column;
   gap: 16px;
 }
+.settings-version {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  text-align: center;
+}
 .range-label {
   display: block;
   font-size: 12px;
