@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <title>Mr. Prompterson</title>
+  <desc>A composed recording assistant in dark glasses and a charcoal suit with a red lapel pin.</desc>
+
+  <!-- Jacket, shirt and lapels -->
+  <path fill="#25272c" stroke="#555960" stroke-width="2" d="M35 297l5-21a59 59 0 0 1 35-41l48-20h74l48 20a59 59 0 0 1 35 41l5 21a11 11 0 0 1-11 13H46a11 11 0 0 1-11-13Z"/>
+  <path fill="#a16549" d="M129 181h62v46l-31 25-31-25Z"/>
+  <path fill="#eeeef0" d="m129 209 31 19 31-19 14 20-45 81-45-81Z"/>
+  <path fill="#22242a" d="m160 229 11 11-5 10 8 60h-28l8-60-5-10Z"/>
+  <path fill="#383b42" d="m122 210-20 10-12 31 22 7-10 16 40 36h18Zm76 0 20 10 12 31-22 7 10 16-40 36h-18Z"/>
+  <path fill="none" stroke="#686c73" stroke-linecap="round" stroke-width="2" d="m119 219-15 26m97-26 15 26"/>
+  <circle cx="210" cy="261" r="5.5" fill="#ff525d"/>
+
+  <!-- Face and clean, slightly receding hairline -->
+  <path fill="#ad7051" d="M101 104c-15-7-23 3-19 19 2 12 9 21 20 20Zm118 0c15-7 23 3 19 19-2 12-9 21-20 20Z"/>
+  <path fill="#bd805b" d="M96 88c0-33 26-54 64-54s64 21 64 54l-4 59c-1 17-7 29-19 40l-19 17a31 31 0 0 1-22 8 31 31 0 0 1-22-8l-19-17c-12-11-18-23-19-40Z"/>
+  <path fill="#24252a" d="m93 112-3-23c-4-31 12-51 36-60 16-6 36-8 54-5 27 4 45 18 50 39 3 13 2 28-1 49l-11-3-2-27c-1-9-5-15-12-20l-5-10c-14 5-30 7-48 2-10-3-21-3-30 3l-4 11c-8 5-12 12-13 21l-2 20Z"/>
+  <path fill="#9a9da4" d="m96 83 10-7c-2 6-3 12-3 18l-1 16-7 2Zm123 4 8-6-2 27-6 3Z"/>
+  <path fill="#474a51" d="M112 46c19-15 48-19 72-13-27-1-47 6-61 15Z"/>
+
+  <!-- Straight expression and dark sunglasses -->
+  <path fill="none" stroke="#955b42" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="m158 128-5 19h11"/>
+  <path stroke="#5c382d" stroke-linecap="round" stroke-width="4" d="M146 169h28"/>
+  <path fill="none" stroke="#141519" stroke-linecap="round" stroke-width="5" d="m98 101 10 3m104 0 10-3m-70 8q8-6 16 0"/>
+  <path fill="#292d33" stroke="#141519" stroke-width="5" d="M113 97h28a11 11 0 0 1 11 11v7a12 12 0 0 1-12 12h-23a12 12 0 0 1-12-10l-2-9a9 9 0 0 1 10-11Zm94 0h-28a11 11 0 0 0-11 11v7a12 12 0 0 0 12 12h23a12 12 0 0 0 12-10l2-9a9 9 0 0 0-10-11Z"/>
+  <path fill="#535961" d="M114 102h20l-19 9-3-6a2 2 0 0 1 2-3Zm66 0h20l-19 9-3-6a2 2 0 0 1 2-3Z"/>
+</svg>

@@ -1,4 +1,6 @@
-# Callista Teleprompter
+# Mr. Prompterson — Video Teleprompter
+
+**Read it. Record it. Share it.** By Callista Digital.
 
 A local-first React + Vite portrait teleprompter and video studio. No account or backend. All scripts, settings, and recordings use IndexedDB on the current origin and device. No media is uploaded.
 
@@ -63,8 +65,14 @@ Desktop automated tests exercise Chromium with synthetic camera/audio, recording
 - WebKit reruns could not launch because `webkit-2388/Playwright.exe` was missing on this host. Initial script and settings checks passed; full WebKit verification remains incomplete.
 - No physical-phone tests, push, or deployment were performed.
 
-## Callista Digital brand styling
+## Branding assets
 
-The app's brand tokens were measured from the rendered [Callista Digital website](https://www.callistadigital.com) on November 6, 2026: slate-950 (`#020617`), slate-900 (`#0F172A`), amber-500 (`#F59E0B`), white, and slate text colors. It uses the identical system sans-serif font stack, 900-weight uppercase headings, tightly tracked titles, widely tracked labels, pill navigation and buttons, rounded cards, and the site's gold border/glow treatment.
+The charcoal, silver, white, and red interface is defined in `src/brand.css` and `src/index.css`. The original mascot and icon live under `public/brand/prompterson/`. Use `node scripts/render-brand-icons.mjs` with Playwright Chromium installed to regenerate the four PNG icon sizes and variants from the SVG favicon. The maskable foreground fits within the central 40% radius. [Web App Manifest maskable safe zone](https://www.w3.org/TR/appmanifest/#icon-masks)
 
-`src/brand.css` contains the shared brand presentation. The original site logo is stored locally in `public/brand` and included in the offline shell. PWA icons are derived from the same logo.
+## Updating an existing installation
+
+The rebrand uses the same site address, manifest identity, start URL, and IndexedDB database as before. Existing scripts, takes, and preferences stay on that origin. The new release uses fresh brand asset paths and versions the offline cache from the production files, including icons and the mascot.
+
+After the updated build is published, finish any recording, close all app windows and browser tabs for the site, then reopen it online. This lets the new service worker take over. Launcher icon and name updates are handled separately by the browser and OS, so they can take longer than the in-app update. Chrome for Android can update an installed app in place. [Chrome manifest update behavior](https://web.dev/articles/manifest-updates)
+
+Try the in-place update first. **Before uninstalling or clearing site data, copy any scripts you need and download your recordings.** A browser or operating system can remove locally stored data when an app is removed. Some browsers or Home Screen shortcuts may require a fresh install for a new launcher icon. Back up your work before replacing the old shortcut or app.

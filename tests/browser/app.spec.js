@@ -85,7 +85,7 @@ test("countdown cancellation, camera+audio recording, portrait export, playback,
   ).toBeEnabled({ timeout: 10000 });
   await expect(
     page.getByRole("button", { name: "Scripts", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await page.waitForTimeout(2300);
   await page.getByRole("button", { name: "Pause scrolling" }).click();
   await expect(
@@ -133,7 +133,7 @@ test("permission denial is actionable and does not begin recording", async ({
   await expect(page.getByRole("alert")).toContainText("permission was denied");
   await expect(
     page.getByRole("button", { name: "Start recording", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
 });
 
 test("storage failure retains the take with an immediate download", async ({

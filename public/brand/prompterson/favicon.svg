@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="background" x2=".7" y2="1">
+      <stop stop-color="#2c2c31"/><stop offset="1" stop-color="#151517"/>
+    </linearGradient>
+    <linearGradient id="panel" x2="0" y2="1">
+      <stop stop-color="#343439"/><stop offset="1" stop-color="#202024"/>
+    </linearGradient>
+    <linearGradient id="record" x2=".35" y2="1">
+      <stop stop-color="#ff6570"/><stop offset="1" stop-color="#f02b3c"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h512v512H0z"/>
+  <g id="icon-mark">
+    <rect x="76" y="106" width="360" height="316" rx="56" fill="#0e0e10" opacity=".5"/>
+    <rect x="76" y="96" width="360" height="316" rx="56" fill="url(#panel)" stroke="#ffffff" stroke-opacity=".16" stroke-width="3"/>
+    <rect x="123" y="152" width="241" height="30" rx="15" fill="#fff"/>
+    <rect x="123" y="208" width="208" height="30" rx="15" fill="#fff"/>
+    <rect x="123" y="264" width="158" height="30" rx="15" fill="#fff"/>
+    <rect x="123" y="320" width="122" height="30" rx="15" fill="#fff"/>
+    <circle cx="362" cy="332" r="68" fill="#19191d"/>
+    <circle cx="362" cy="332" r="56" fill="url(#record)" stroke="#ff9aa1" stroke-opacity=".4" stroke-width="2"/>
+  </g>
+</svg>

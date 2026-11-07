@@ -1,17 +1,17 @@
 {
   "id": "./",
-  "name": "Callista Teleprompter",
-  "short_name": "Callista",
-  "description": "A private teleprompter and portrait recording studio.",
+  "name": "Mr. Prompterson",
+  "short_name": "Mr. Prompterson",
+  "description": "Read it. Record it. Share it. A video teleprompter by Callista Digital.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#141416",
+  "theme_color": "#141416",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "brand/prompterson/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "brand/prompterson/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "brand/prompterson/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
