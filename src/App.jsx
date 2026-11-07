@@ -42,6 +42,9 @@ const starter = {
   tags: ["Personal"],
   updated: 0,
 };
+const diagnosticsEnabled =
+  new URLSearchParams(window.location.search).get("recordingDiagnostics") ===
+  "1";
 export function IconButton({ label, children, ...props }) {
   return (
     <button className="icon-button" aria-label={label} title={label} {...props}>
@@ -146,6 +149,18 @@ export default function App() {
     [newTag, setNewTag] = useState(""),
     [rename, setRename] = useState("");
   const installOffer = useInstallOffer();
+  const [diagnostics, setDiagnostics] = useState({});
+  function recordDiagnostics(section, details) {
+    console.info("[Callista recording]", section, details);
+    setDiagnostics((previous) =>
+      section === "error"
+        ? {
+            ...previous,
+            errors: [...(previous.errors || []), details].slice(-10),
+          }
+        : { ...previous, [section]: details },
+    );
+  }
   const revision = useRef(0),
     pendingWrites = useRef(new Set()),
     settingsRef = useRef(defaults);
@@ -322,7 +337,11 @@ export default function App() {
               navigate("scripts");
             }}
           >
-            <img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/callista-mark.png`} alt="" />
+            <img
+              className="brand-logo"
+              src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
+              alt=""
+            />
             <span className="brand-name">CALLISTA DIGITAL</span>
           </a>
           <div className="brand-right">
@@ -505,6 +524,7 @@ export default function App() {
           choose={() => setModal({ type: "choose" })}
           onRecorded={onRecorded}
           onState={setRecordState}
+          onDiagnostics={diagnosticsEnabled ? recordDiagnostics : undefined}
           alert={setNotice}
         />
       )}
@@ -825,6 +845,28 @@ export default function App() {
                 </select>
               </label>
               <label className="select-label">
+                Recording framing
+                <select
+                  value={settings.framing}
+                  onChange={(e) => updateSettings({ framing: e.target.value })}
+                >
+                  <option value="standard">Standard</option>
+                  <option value="close-up">Close-Up</option>
+                </select>
+              </label>
+              <label className="select-label">
+                Microphone
+                <select
+                  value={settings.microphone}
+                  onChange={(e) =>
+                    updateSettings({ microphone: e.target.value })
+                  }
+                >
+                  <option value="natural">Natural</option>
+                  <option value="voice">Voice Cleanup</option>
+                </select>
+              </label>
+              <label className="select-label">
                 Default camera
                 <select
                   value={settings.facing}
@@ -845,13 +887,34 @@ export default function App() {
                 />
               </label>
               <p className="fine-print">
-                Quality adapts to your camera. Saved footage is never mirrored.
-                Select a specific camera in the studio controls.
+                Close-Up uses a tighter crop and can lower output resolution.
+                Voice Cleanup uses your browser’s microphone processing.
               </p>
+              {diagnosticsEnabled && (
+                <details className="recording-diagnostics">
+                  <summary>Recording diagnostics</summary>
+                  <pre>
+                    {JSON.stringify(
+                      {
+                        browser: navigator.userAgent,
+                        platform:
+                          navigator.userAgentData?.platform ||
+                          navigator.platform,
+                        ...diagnostics,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </details>
+              )}
               {installOffer && (
                 <section aria-label="App installation">
                   {installOffer.install ? (
-                    <button className="gold-button full" onClick={installOffer.install}>
+                    <button
+                      className="gold-button full"
+                      onClick={installOffer.install}
+                    >
                       Install App
                     </button>
                   ) : (
@@ -1102,6 +1165,11 @@ function Playback({ video, download, share }) {
         · {formatTime(video.duration)} ·{" "}
         {(video.blob.size / 1024 / 1024).toFixed(1)} MB
       </p>
+      {video.verified && video.width * 16 !== video.height * 9 && (
+        <p className="fine-print">
+          This take’s saved dimensions differ from 9:16.
+        </p>
+      )}
       <p className="fine-print">
         {video.unsaved
           ? "Not saved locally. Download this take before closing."

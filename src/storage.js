@@ -50,6 +50,8 @@ export const defaults = {
   countdown: 3,
   mirror: true,
   quality: "1080",
+  framing: "standard",
+  microphone: "natural",
   facing: "user",
   deviceId: "",
   tags: ["Work", "Social", "Personal"],

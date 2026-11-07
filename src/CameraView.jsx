@@ -14,13 +14,19 @@ import {
 } from "lucide-react";
 import {
   busy,
+  framingScale,
   formatTime,
   inspectRecording,
   mediaError,
   portraitStream,
   requestCamera,
-  supportedMime,
+  startRecorder,
 } from "./media";
+import {
+  captureDetails,
+  encoderDetails,
+  measureMicrophone,
+} from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
 
 export default function CameraView({
@@ -30,12 +36,14 @@ export default function CameraView({
   choose,
   onRecorded,
   onState,
+  onDiagnostics,
   alert,
 }) {
   const video = useRef(null),
     source = useRef(null),
     recorder = useRef(null),
     output = useRef(null),
+    stopMeter = useRef(null),
     timer = useRef(null),
     mounted = useRef(true),
     generation = useRef(0),
@@ -55,7 +63,20 @@ export default function CameraView({
     [devices, setDevices] = useState([]),
     [resolution, setResolution] = useState(""),
     [front, setFront] = useState(true);
-  callbacks.current = { onRecorded, onState, alert, settings, script };
+  callbacks.current = {
+    onRecorded,
+    onState,
+    onDiagnostics,
+    alert,
+    settings,
+    script,
+  };
+  function reportError(stage, error) {
+    callbacks.current.onDiagnostics?.("error", {
+      stage,
+      message: mediaError(error),
+    });
+  }
   function transition(next) {
     stateRef.current = next;
     if (mounted.current) setState(next);
@@ -108,6 +129,8 @@ export default function CameraView({
       video.current.srcObject = stream;
       await video.current.play();
       if (!mounted.current || token !== generation.current) return;
+      if (onDiagnostics)
+        onDiagnostics("capture", captureDetails(stream, video.current));
       setResolution(
         `${trackSettings.width || video.current.videoWidth} × ${trackSettings.height || video.current.videoHeight} source`,
       );
@@ -118,6 +141,10 @@ export default function CameraView({
           stopRecording();
           setError(
             "Camera or microphone was disconnected. Your available footage is being kept.",
+          );
+          reportError(
+            "capture",
+            new Error("Camera or microphone disconnected."),
           );
           if (!busy(stateRef.current)) transition("error");
         };
@@ -134,6 +161,7 @@ export default function CameraView({
     } catch (e) {
       if (mounted.current && token === generation.current) {
         stopTracks();
+        reportError("capture", e);
         setError(mediaError(e));
         transition("error");
       }
@@ -150,22 +178,31 @@ export default function CameraView({
         throw new Error(
           "Camera or microphone stopped. Enable them again before recording.",
         );
-      const mimeType = supportedMime();
-      output.current = portraitStream(
+      const preferences = callbacks.current.settings;
+      const take = portraitStream(
         video.current,
         source.current,
-        callbacks.current.settings.quality,
+        preferences.quality,
+        preferences.framing,
       );
-      if (output.current.width / output.current.height > 0.57)
-        callbacks.current.alert(
-          "Portrait capture is unavailable in this browser. This take will use the camera’s original dimensions.",
-        );
-      const capture = new MediaRecorder(output.current.stream, {
-        ...(mimeType ? { mimeType } : {}),
-        videoBitsPerSecond: 6500000,
-        audioBitsPerSecond: 128000,
-      });
+      output.current = take;
+      if (onDiagnostics) {
+        onDiagnostics("capture", captureDetails(source.current, video.current));
+        onDiagnostics("framing", {
+          preset: preferences.framing,
+          microphone: preferences.microphone,
+          path: take.path,
+          sourceCrop: take.crop,
+          encoderFrame: { width: take.width, height: take.height },
+        });
+        onDiagnostics("export", null);
+        stopMeter.current = measureMicrophone(source.current);
+      }
+      started.current = performance.now();
+      const capture = startRecorder(take);
       recorder.current = capture;
+      capture.onstart = () =>
+        callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
       let bytes = 0;
       const recordingScript = callbacks.current.script;
@@ -182,6 +219,7 @@ export default function CameraView({
         }
       };
       capture.onerror = (e) => {
+        reportError("recording", e.error || new Error("Encoder error."));
         callbacks.current.alert(
           `Recording interrupted: ${e.error?.message || "encoder error"}. Available footage will be kept.`,
         );
@@ -192,22 +230,40 @@ export default function CameraView({
           setPlaying(false);
           transition("saving");
         }
-        const duration = (performance.now() - started.current) / 1000;
+        const elapsed = (performance.now() - started.current) / 1000;
+        const microphoneLevels = stopMeter.current?.();
+        stopMeter.current = null;
         output.current?.cleanup();
         output.current = null;
         recorder.current = null;
         const blob = new Blob(chunks, {
-          type: capture.mimeType || chunks[0]?.type || "video/webm",
+          type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
         if (!blob.size) {
           if (mounted.current) {
             transition("ready");
             setError("No footage was captured. Please try again.");
+            reportError("recording", new Error("No footage was captured."));
           }
           return;
         }
         try {
-          const metadata = await inspectRecording(blob);
+          const { mediaDuration, ...metadata } = await inspectRecording(blob);
+          const duration = mediaDuration > 0 ? mediaDuration : elapsed;
+          const verified = Boolean(metadata.width && metadata.height);
+          callbacks.current.onDiagnostics?.("export", {
+            width: metadata.width ?? null,
+            height: metadata.height ?? null,
+            portrait: verified && metadata.width * 16 === metadata.height * 9,
+            mimeType: blob.type,
+            bytes: blob.size,
+            duration,
+            averageFileBitsPerSecond:
+              duration > 0 ? Math.round((blob.size * 8) / duration) : null,
+            durationSource:
+              mediaDuration > 0 ? "decoded file" : "recording timer",
+            microphoneLevels,
+          });
           const item = {
             id: crypto.randomUUID(),
             title: `${recordingScript?.title || "Unscripted"} · ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
@@ -217,10 +273,11 @@ export default function CameraView({
             duration,
             blob,
             ...metadata,
-            verified: Boolean(metadata.width && metadata.height),
+            verified,
           };
           await callbacks.current.onRecorded(item);
-        } catch {
+        } catch (error) {
+          reportError("export", error);
           callbacks.current.alert(
             "Could not finish processing the take. Please keep this page open.",
           );
@@ -233,17 +290,18 @@ export default function CameraView({
             );
         }
       };
-      started.current = performance.now();
       offset.current = 0;
       if (scroll.current) scroll.current.scrollTop = 0;
-      capture.start(1000);
       setElapsed(0);
       setPlaying(true);
       setControls(false);
       transition("recording");
     } catch (e) {
+      stopMeter.current?.();
+      stopMeter.current = null;
       output.current?.cleanup();
       output.current = null;
+      reportError("recording", e);
       setError(mediaError(e));
       transition(source.current ? "ready" : "error");
     }
@@ -309,6 +367,8 @@ export default function CameraView({
       generation.current++;
       clearInterval(timer.current);
       if (recorder.current?.state === "recording") recorder.current.stop();
+      stopMeter.current?.();
+      stopMeter.current = null;
       output.current?.cleanup();
       stopTracks();
       wake.current?.release().catch(() => {});
@@ -394,17 +454,41 @@ export default function CameraView({
   }
   return (
     <main className="camera-stage">
-      <video
-        ref={video}
-        className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
-        autoPlay
-        muted
-        playsInline
-      />
+      <div className="camera-frame">
+        <video
+          ref={video}
+          className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
+          style={{ "--framing-scale": framingScale(settings.framing) }}
+          onResize={() => {
+            const take = output.current;
+            if (
+              stateRef.current === "recording" &&
+              take?.path === "native" &&
+              (video.current.videoWidth !== take.width ||
+                video.current.videoHeight !== take.height)
+            ) {
+              reportError(
+                "recording",
+                new Error("Camera orientation changed during capture."),
+              );
+              callbacks.current.alert(
+                "Camera orientation changed. Saving the current take.",
+              );
+              stopRecording();
+            }
+          }}
+          autoPlay
+          muted
+          playsInline
+        />
+      </div>
       <div className="camera-vignette" />
       <header className="camera-header">
         <span className="studio-wordmark">
-          <img src={`${import.meta.env.BASE_URL}brand/callista-mark.png`} alt="" />
+          <img
+            src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
+            alt=""
+          />
           <small>CALLISTA STUDIO</small>
         </span>
         <span
@@ -563,6 +647,17 @@ export default function CameraView({
                 updateSettings({ position: next });
               }}
             />
+          </label>
+          <label className="select-label">
+            Recording framing
+            <select
+              disabled={busy(state)}
+              value={settings.framing}
+              onChange={(e) => updateSettings({ framing: e.target.value })}
+            >
+              <option value="standard">Standard</option>
+              <option value="close-up">Close-Up</option>
+            </select>
           </label>
           <label className="select-label">
             Camera

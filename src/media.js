@@ -6,20 +6,44 @@ export const formatTime = (seconds) =>
     .padStart(2, "0")}`;
 export const busy = (state) =>
   ["countdown", "recording", "saving"].includes(state);
-export function supportedMime(Recorder = globalThis.MediaRecorder) {
+export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
   if (!Recorder)
     throw new Error(
       "Video recording is not supported. Try current Chrome or Safari.",
     );
-  return (
-    [
-      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-      "video/webm;codecs=vp8,opus",
-      "video/webm;codecs=vp9,opus",
-      "video/mp4",
-      "video/webm",
-    ].find((type) => Recorder.isTypeSupported(type)) || ""
-  );
+  const formats = [
+    "video/mp4;codecs=avc1.42E028,mp4a.40.2",
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp9,opus",
+    "video/webm",
+  ];
+  const options = {
+    videoBitsPerSecond: Math.max(
+      3_000_000,
+      Math.round((12_000_000 * output.width * output.height) / (1080 * 1920)),
+    ),
+    audioBitsPerSecond: 160_000,
+  };
+  let lastError;
+  for (const mimeType of [
+    ...formats.filter((type) => Recorder.isTypeSupported(type)),
+    "",
+  ]) {
+    try {
+      const recorder = new Recorder(output.stream, {
+        ...options,
+        ...(mimeType ? { mimeType } : {}),
+      });
+      // Recorder events are queued, so callers can attach handlers synchronously.
+      recorder.start(1000);
+      return recorder;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 export function mediaError(error) {
   return (
@@ -52,28 +76,42 @@ export async function requestCamera(
   const selection = settings.deviceId
     ? { deviceId: { exact: settings.deviceId } }
     : { facingMode: { ideal: settings.facing } };
+  const voiceCleanup = settings.microphone === "voice";
+  const audio = {
+    echoCancellation: { ideal: voiceCleanup },
+    noiseSuppression: { ideal: voiceCleanup },
+    autoGainControl: { ideal: voiceCleanup },
+    channelCount: { ideal: 1 },
+    sampleRate: { ideal: 48000 },
+  };
+  const frameRate = { ideal: 30, max: 30 };
   try {
-    return await resetCameraZoom(await devices.getUserMedia({
-      audio: true,
-      video: {
-        ...selection,
-        width: { ideal: longEdge },
-        height: { ideal: longEdge },
-        resizeMode: { exact: "none" },
-        frameRate: { ideal: 30, max: 30 },
-      },
-    }));
+    return await resetCameraZoom(
+      await devices.getUserMedia({
+        audio,
+        video: {
+          ...selection,
+          width: { ideal: longEdge },
+          height: { ideal: longEdge },
+          resizeMode: { exact: "none" },
+          frameRate,
+        },
+      }),
+    );
   } catch (error) {
     if (error.name !== "OverconstrainedError") throw error;
-    return resetCameraZoom(await devices.getUserMedia({
-      audio: true,
-      video: {
-        facingMode: { ideal: settings.facing },
-        width: { ideal: 1280 },
-        height: { ideal: 1280 },
-        resizeMode: { ideal: "none" },
-      },
-    }));
+    return resetCameraZoom(
+      await devices.getUserMedia({
+        audio,
+        video: {
+          facingMode: { ideal: settings.facing },
+          width: { ideal: 1280 },
+          height: { ideal: 1280 },
+          resizeMode: { ideal: "none" },
+          frameRate,
+        },
+      }),
+    );
   }
 }
 async function resetCameraZoom(stream) {
@@ -81,65 +119,126 @@ async function resetCameraZoom(stream) {
   try {
     const zoom = track?.getCapabilities?.().zoom;
     if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max)) {
-      await track.applyConstraints({ advanced: [{ zoom: Math.max(zoom.min, Math.min(1, zoom.max)) }] });
+      const constraints = track.getConstraints?.() || {};
+      await track.applyConstraints({
+        ...constraints,
+        advanced: [
+          ...(constraints.advanced || []),
+          { zoom: Math.max(zoom.min, Math.min(1, zoom.max)) },
+        ],
+      });
     }
   } catch {
     // Zoom controls are optional. Keep the usable native stream if unsupported or denied.
   }
   return stream;
 }
-// Draw only camera pixels, with no CSS mirroring, text, or interface controls.
-export function portraitStream(video, source, quality) {
+export const framingScale = (framing) => (framing === "close-up" ? 1.2 : 1);
+
+function portraitCrop(width, height, zoom) {
+  const cropWidth = Math.min(width, (height * 9) / 16) / zoom;
+  const cropHeight = (cropWidth * 16) / 9;
+  return {
+    x: (width - cropWidth) / 2,
+    y: (height - cropHeight) / 2,
+    width: cropWidth,
+    height: cropHeight,
+  };
+}
+
+// Record a compatible native frame directly. Otherwise encode one camera-only crop.
+export function portraitStream(video, source, quality, framing) {
   const sw = video.videoWidth,
     sh = video.videoHeight;
   if (!sw || !sh)
     throw new Error("Camera is warming up. Try recording again in a moment.");
-  const canvas = document.createElement("canvas");
-  if (!canvas.captureStream)
-    return { stream: source, cleanup() {}, width: sw, height: sh };
-  const height = Math.min(
-    Math.round((Number(quality) * 16) / 9),
-    Math.max(sh, Math.floor((sw * 16) / 9)),
-  );
-  // Even dimensions keep H.264 encoders compatible at fallback resolutions.
-  canvas.height = Math.floor(height / 32) * 32;
-  canvas.width = (canvas.height * 9) / 16;
-  const context = canvas.getContext("2d", { alpha: false });
-  let frame,
-    last = 0;
-  function draw(time) {
-    if (time - last >= 1000 / 30 || !last) {
-      // Fit the entire camera frame into the portrait export, rather than zooming
-      // into its center. Recompute for cameras that rotate their native stream.
-      const sourceWidth = video.videoWidth || sw, sourceHeight = video.videoHeight || sh;
-      const scale = Math.min(canvas.width / sourceWidth, canvas.height / sourceHeight);
-      const width = sourceWidth * scale, height = sourceHeight * scale;
-      context.fillStyle = "#000";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(
-        video,
-        0,
-        0,
-        sourceWidth,
-        sourceHeight,
-        (canvas.width - width) / 2,
-        (canvas.height - height) / 2,
-        width,
-        height,
-      );
-      last = time;
-    }
-    frame = requestAnimationFrame(draw);
+  const zoom = framingScale(framing);
+  const crop = portraitCrop(sw, sh, zoom);
+  // Prefer Full HD, then HD, then the largest even 9:16 frame the crop supports.
+  const available = Math.min(Number(quality), crop.width);
+  const width =
+    available >= 1080
+      ? 1080
+      : available >= 720
+        ? 720
+        : Math.floor(available / 18) * 18;
+  const height = (width * 16) / 9;
+  if (!width)
+    throw new Error("The camera frame is too small for portrait recording.");
+  const trackSettings = source.getVideoTracks()[0].getSettings();
+  if (
+    zoom === 1 &&
+    sw * 16 === sh * 9 &&
+    sw % 2 === 0 &&
+    sh % 2 === 0 &&
+    sw <= Number(quality) &&
+    (!trackSettings.width || trackSettings.width === sw) &&
+    (!trackSettings.height || trackSettings.height === sh)
+  ) {
+    return {
+      stream: source,
+      width: sw,
+      height: sh,
+      path: "native",
+      crop,
+      cleanup() {},
+    };
   }
-  draw(0);
-  const stream = canvas.captureStream(30);
+
+  const canvas = document.createElement("canvas");
+  if (!canvas.captureStream) {
+    throw new Error(
+      "This browser cannot crop the camera to 9:16. Try Standard framing with a portrait camera, or use a current Chrome or Safari browser.",
+    );
+  }
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context)
+    throw new Error("Could not prepare the portrait recording frame.");
+  context.imageSmoothingQuality = "high";
+  const frameCallbacks = typeof video.requestVideoFrameCallback === "function";
+  const manualFrames =
+    frameCallbacks &&
+    typeof window.CanvasCaptureMediaStreamTrack?.prototype.requestFrame ===
+      "function";
+  const stream = canvas.captureStream(manualFrames ? 0 : 30);
+  const canvasTrack = stream.getVideoTracks()[0];
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
+  let frame;
+  let previousTime = -1;
+  function draw() {
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    if (!sourceWidth || !sourceHeight || video.readyState < 2) return;
+    const {
+      x,
+      y,
+      width: cropWidth,
+      height: cropHeight,
+    } = portraitCrop(sourceWidth, sourceHeight, zoom);
+    context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
+    if (manualFrames) canvasTrack.requestFrame();
+  }
+  function next() {
+    if (frameCallbacks || video.currentTime !== previousTime) {
+      previousTime = video.currentTime;
+      draw();
+    }
+    frame = frameCallbacks
+      ? video.requestVideoFrameCallback(next)
+      : requestAnimationFrame(next);
+  }
+  next();
   return {
     stream,
-    width: canvas.width,
-    height: canvas.height,
+    width,
+    height,
+    path: "center crop",
+    crop,
     cleanup() {
-      cancelAnimationFrame(frame);
+      if (frameCallbacks) video.cancelVideoFrameCallback(frame);
+      else cancelAnimationFrame(frame);
       stream.getVideoTracks().forEach((track) => track.stop());
     },
   };
@@ -178,7 +277,14 @@ export function inspectRecording(blob) {
       } catch {
         /* Keep footage if thumbnail fails. */
       }
-      done({ width: video.videoWidth, height: video.videoHeight, thumbnail });
+      done({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        thumbnail,
+        mediaDuration: Number.isFinite(video.duration)
+          ? video.duration
+          : undefined,
+      });
     };
     video.onerror = () => done({});
     timer = setTimeout(() => done({}), 8000);

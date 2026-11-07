@@ -8,7 +8,7 @@ import {
   formatTime,
   mediaError,
   requestCamera,
-  supportedMime,
+  startRecorder,
 } from "../src/media.js";
 
 test("scripts round-trip through IndexedDB, including edits, tags and deletion", async () => {
@@ -49,13 +49,27 @@ test("recording busy states protect navigation", () => {
   for (const state of ["idle", "ready", "error"])
     assert.equal(busy(state), false);
 });
-test("MIME negotiation uses browser support and falls back to browser default", () => {
-  assert.equal(
-    supportedMime({ isTypeSupported: (t) => t === "video/mp4" }),
-    "video/mp4",
-  );
-  assert.equal(supportedMime({ isTypeSupported: () => false }), "");
-  assert.throws(() => supportedMime(null), /not supported/);
+test("recorder prefers MP4, then retries a supported format if the encoder fails", () => {
+  const attempts = [];
+  class TestRecorder {
+    static isTypeSupported(type) {
+      return type === "video/mp4" || type === "video/webm;codecs=vp8,opus";
+    }
+    constructor(stream, options) {
+      this.options = options;
+      attempts.push(options.mimeType);
+    }
+    start() {
+      if (this.options.mimeType === "video/mp4")
+        throw new Error("Encoder busy");
+    }
+  }
+  const output = { width: 1080, height: 1920, stream: {} };
+  const recorder = startRecorder(output, TestRecorder);
+  assert.deepEqual(attempts, ["video/mp4", "video/webm;codecs=vp8,opus"]);
+  assert.equal(recorder.options.videoBitsPerSecond, 12_000_000);
+  assert.equal(recorder.options.audioBitsPerSecond, 160_000);
+  assert.throws(() => startRecorder(output, null), /not supported/);
 });
 test("camera requests retain the native field of view and microphone audio", async () => {
   let constraints;
@@ -69,21 +83,53 @@ test("camera requests retain the native field of view and microphone audio", asy
     },
   );
   assert.equal(result, "stream");
-  assert.equal(constraints.audio, true);
+  assert.equal(constraints.audio.echoCancellation.ideal, false);
+  assert.equal(constraints.audio.noiseSuppression.ideal, false);
+  assert.equal(constraints.audio.autoGainControl.ideal, false);
   assert.equal(constraints.video.height.ideal, 1920);
   assert.equal(constraints.video.width.ideal, 1920);
   assert.equal(constraints.video.aspectRatio, undefined);
-  assert.deepEqual(constraints.video.resizeMode, { exact: 'none' });
+  assert.deepEqual(constraints.video.resizeMode, { exact: "none" });
   assert.equal(constraints.video.facingMode.ideal, "user");
+  await requestCamera(
+    { quality: "1080", facing: "environment", microphone: "voice" },
+    {
+      getUserMedia: async (c) => {
+        constraints = c;
+        return "stream";
+      },
+    },
+  );
+  assert.equal(constraints.audio.echoCancellation.ideal, true);
+  assert.equal(constraints.audio.noiseSuppression.ideal, true);
+  assert.equal(constraints.audio.autoGainControl.ideal, true);
+  assert.equal(constraints.video.facingMode.ideal, "environment");
 });
 test("camera zoom resets to 1x when supported and tolerates unsupported zoom", async () => {
   const applied = [];
-  const track = { getCapabilities: () => ({ zoom: { min: 1, max: 8 } }), applyConstraints: async constraints => applied.push(constraints) };
+  const track = {
+    getCapabilities: () => ({ zoom: { min: 1, max: 8 } }),
+    applyConstraints: async (constraints) => applied.push(constraints),
+  };
   const stream = { getVideoTracks: () => [track] };
-  assert.equal(await requestCamera({ quality: '1080', facing: 'user' }, { getUserMedia: async () => stream }), stream);
+  assert.equal(
+    await requestCamera(
+      { quality: "1080", facing: "user" },
+      { getUserMedia: async () => stream },
+    ),
+    stream,
+  );
   assert.deepEqual(applied, [{ advanced: [{ zoom: 1 }] }]);
-  track.applyConstraints = async () => { throw new DOMException('Unsupported', 'NotSupportedError'); };
-  assert.equal(await requestCamera({ quality: '1080', facing: 'user' }, { getUserMedia: async () => stream }), stream);
+  track.applyConstraints = async () => {
+    throw new DOMException("Unsupported", "NotSupportedError");
+  };
+  assert.equal(
+    await requestCamera(
+      { quality: "1080", facing: "user" },
+      { getUserMedia: async () => stream },
+    ),
+    stream,
+  );
 });
 test("constraint failure retries lower quality but permission denial does not retry", async () => {
   let calls = 0;
