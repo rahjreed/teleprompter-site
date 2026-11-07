@@ -1,11 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
-test("reading panel stays clear of camera controls on a short phone screen and remembers position", async ({
+test("portrait touch drag reaches the safe top edge, stays stable during recording, and is remembered", async ({
   page,
+  context,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto("/");
+  const safeAreas =
+    ".camera-stage { --camera-safe-top: 47px; --camera-safe-bottom: 34px; }";
+  await page.addStyleTag({ content: safeAreas });
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
   await expect(
@@ -17,6 +21,16 @@ test("reading panel stays clear of camera controls on a short phone screen and r
   expect(natural.echoCancellation).toBe(false);
   expect(natural.noiseSuppression).toBe(false);
   expect(natural.autoGainControl).toBe(false);
+  await expect(
+    page.locator(".camera-stage header, .camera-stage img"),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Select script", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Choose your script" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Adjust teleprompter" }).click();
   const slider = page.getByRole("slider", { name: /Panel position/ });
   await slider.focus();
@@ -26,17 +40,79 @@ test("reading panel stays clear of camera controls on a short phone screen and r
   const panel = await page.locator(".prompter-panel").boundingBox(),
     controls = await page.locator(".camera-tools").boundingBox();
   expect(panel.y + panel.height).toBeLessThan(controls.y);
+
+  const handle = page.getByRole("button", {
+    name: "Drag text panel vertically",
+  });
+  const grip = await handle.boundingBox();
+  expect(grip.height).toBeGreaterThanOrEqual(44);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+  const x = Math.round(grip.x + grip.width / 2);
+  const y = Math.round(grip.y + grip.height / 2);
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x, y: 54 }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  const prompt = page.locator(".prompter-panel");
+  await expect
+    .poll(async () => (await prompt.boundingBox()).y)
+    .toBeCloseTo(53, 0);
+  await page
+    .getByRole("button", { name: "Start recording", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Cancel countdown" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Stop recording", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".record-timer")).toHaveText(/REC \d{2}:\d{2}/);
+  await expect(
+    page.locator(".camera-tools, .camera-settings, .bottom-nav"),
+  ).toHaveCount(0);
+  const during = await prompt.boundingBox();
+  const transport = await page
+    .locator(".active-recording-controls")
+    .boundingBox();
+  expect(during.y).toBeCloseTo(53, 0);
+  expect(during.y + during.height).toBeLessThan(transport.y);
+  expect(transport.y + transport.height).toBeLessThanOrEqual(667 - 34);
+  await expect
+    .poll(() => page.locator(".prompter-scroll").evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await page.screenshot({
+    path: test.info().outputPath("portrait-recording.png"),
+  });
+  await page
+    .getByRole("button", { name: "Stop recording", exact: true })
+    .click();
+  await expect(page.locator("video.playback")).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Scripts", exact: true }).click();
+  await page.setViewportSize({ width: 412, height: 915 });
   await page.reload();
+  await page.addStyleTag({ content: safeAreas });
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
   await expect(
     page.getByRole("button", { name: "Start recording", exact: true }),
   ).toBeEnabled();
+  await expect
+    .poll(async () => (await prompt.boundingBox()).y)
+    .toBeCloseTo(53, 0);
   await page.getByRole("button", { name: "Adjust teleprompter" }).click();
   await expect(
     page.getByRole("slider", { name: /Panel position/ }),
-  ).toHaveValue("25");
+  ).toHaveValue("0");
 });
 
 for (const fixture of [
@@ -199,7 +275,9 @@ for (const fixture of [
           callbackId = video.requestVideoFrameCallback(trackPlayback);
         }
         callbackId = video.requestVideoFrameCallback(trackPlayback);
-        await new Promise((resolve) => video.addEventListener("ended", resolve, { once: true }));
+        await new Promise((resolve) =>
+          video.addEventListener("ended", resolve, { once: true }),
+        );
         video.cancelVideoFrameCallback(callbackId);
         return {
           left: at(0.25),

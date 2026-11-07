@@ -326,7 +326,9 @@ export default function App() {
     (a, b) => b.updated - a.updated,
   );
   return (
-    <div className={`app ${view === "camera" ? "camera-mode" : ""}`}>
+    <div
+      className={`app ${view === "camera" ? "camera-mode" : ""} ${recordState === "recording" ? "camera-recording" : ""}`}
+    >
       {view !== "camera" && (
         <header className="brand-bar">
           <a
@@ -639,35 +641,34 @@ export default function App() {
           )}
         </main>
       )}
-      <nav className="bottom-nav" aria-label="Main navigation">
-        <button
-          className={view === "scripts" ? "nav-item active" : "nav-item"}
-          disabled={busy(recordState)}
-          onClick={() => navigate("scripts")}
-        >
-          <AlignLeft size={22} />
-          <span>Scripts</span>
-        </button>
-        <button
-          className={`camera-nav ${view === "camera" ? "selected" : ""}`}
-          aria-label="Open camera"
-          disabled={busy(recordState)}
-          onClick={() => navigate("camera")}
-        >
-          <span>
-            <Camera size={25} />
-          </span>
-          <small>Studio</small>
-        </button>
-        <button
-          className={view === "videos" ? "nav-item active" : "nav-item"}
-          disabled={busy(recordState)}
-          onClick={() => navigate("videos")}
-        >
-          <Clapperboard size={22} />
-          <span>Videos</span>
-        </button>
-      </nav>
+      {!busy(recordState) && (
+        <nav className="bottom-nav" aria-label="Main navigation">
+          <button
+            className={view === "scripts" ? "nav-item active" : "nav-item"}
+            onClick={() => navigate("scripts")}
+          >
+            <AlignLeft size={22} />
+            <span>Scripts</span>
+          </button>
+          <button
+            className={`camera-nav ${view === "camera" ? "selected" : ""}`}
+            aria-label="Open camera"
+            onClick={() => navigate("camera")}
+          >
+            <span>
+              <Camera size={25} />
+            </span>
+            <small>Studio</small>
+          </button>
+          <button
+            className={view === "videos" ? "nav-item active" : "nav-item"}
+            onClick={() => navigate("videos")}
+          >
+            <Clapperboard size={22} />
+            <span>Videos</span>
+          </button>
+        </nav>
+      )}
       {notice && (
         <div className="toast" role="status">
           <span>{notice}</span>

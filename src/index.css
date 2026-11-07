@@ -693,6 +693,9 @@ select {
 .toast span {
   flex: 1;
 }
+.camera-recording .toast {
+  bottom: calc(150px + env(safe-area-inset-bottom));
+}
 .backdrop {
   position: fixed;
   inset: 0;
@@ -905,6 +908,9 @@ select {
   min-height: 100dvh;
 }
 .camera-stage {
+  --camera-safe-top: env(safe-area-inset-top);
+  --camera-safe-bottom: env(safe-area-inset-bottom);
+  --camera-tools-offset: 267px;
   position: relative;
   height: 100dvh;
   max-height: 100dvh;
@@ -948,59 +954,6 @@ select {
     #000e
   );
 }
-.camera-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: calc(20px + env(safe-area-inset-top)) 22px 15px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 2;
-}
-.studio-wordmark {
-  font-family: inherit;
-  font-style: italic;
-  font-size: 27px;
-  color: var(--gold);
-}
-.studio-wordmark > span {
-  margin-left: -4px;
-}
-.studio-wordmark small {
-  font-family: inherit;
-  font-size: 8px;
-  font-style: normal;
-  letter-spacing: 0.15em;
-  margin-left: 8px;
-  color: #ddd;
-}
-.camera-status {
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  border: 1px solid #ffffff26;
-  border-radius: 20px;
-  padding: 9px 11px;
-  background: #0003;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.camera-status > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--gold);
-}
-.camera-status.live {
-  color: #fff;
-  background: #b82828;
-  border-color: #de4646;
-}
-.camera-status.live > span {
-  background: #fff;
-}
 .camera-intro {
   position: absolute;
   top: 16%;
@@ -1022,6 +975,12 @@ select {
   margin-bottom: 30px;
   background: #f59e0b08;
 }
+.camera-intro-icon img {
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
+  border-radius: 12px;
+}
 .camera-intro h1 {
   font-size: 50px;
   line-height: 1.08;
@@ -1040,38 +999,34 @@ select {
   color: #64748b;
   margin-top: 16px;
 }
-.prompter-area {
+.prompter-lane {
   position: absolute;
+  top: calc(var(--camera-safe-top) + 6px);
+  bottom: calc(var(--camera-tools-offset) + var(--camera-safe-bottom) + 52px);
   left: 14px;
   right: 14px;
   z-index: 2;
-  max-height: 47%;
+  pointer-events: none;
 }
-.script-select {
+.prompter-area {
+  position: absolute;
+  inset: calc(var(--prompt-progress) * min(var(--prompt-travel-cap), max(0px, 100% - var(--prompt-min-height)))) 0 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-size: 10px;
-  max-width: 80%;
-  padding: 8px 16px;
-  background: #0006;
-  border: 1px solid #ffffff15;
-  border-radius: 16px;
-  margin: 0 auto 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-direction: column;
 }
 .prompter-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  pointer-events: auto;
   border-radius: 19px;
   overflow: hidden;
   backdrop-filter: blur(2px);
 }
 .prompter-scroll {
-  max-height: 32dvh;
   height: 32dvh;
-  padding: 20px 16px 0;
+  min-height: 0;
+  padding: 10px 16px 0;
   white-space: pre-wrap;
   overflow: auto;
   scrollbar-width: none;
@@ -1084,7 +1039,8 @@ select {
 }
 .drag-handle {
   width: 100%;
-  height: 30px;
+  height: 44px;
+  flex: none;
   color: #cbd5e1;
   display: grid;
   place-items: center;
@@ -1093,7 +1049,7 @@ select {
 }
 .camera-tools {
   position: absolute;
-  bottom: calc(267px + env(safe-area-inset-bottom));
+  bottom: calc(var(--camera-tools-offset) + var(--camera-safe-bottom));
   left: 22px;
   right: 22px;
   display: flex;
@@ -1125,18 +1081,9 @@ select {
   width: 44px;
   height: 40px;
 }
-.mic-badge {
-  display: flex;
-  gap: 2px;
-  color: #cbd5e1;
-  background: #0f172a99;
-  border: 1px solid #ffffff20;
-  border-radius: 50px;
-  padding: 12px 7px;
-}
 .record-controls {
   position: absolute;
-  bottom: calc(124px + env(safe-area-inset-bottom));
+  bottom: calc(124px + var(--camera-safe-bottom));
   left: 0;
   right: 0;
   display: flex;
@@ -1187,15 +1134,38 @@ select {
   background: #b72828;
   border-radius: 16px;
   padding: 6px 12px;
-  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.active-recording-controls {
   position: absolute;
-  bottom: 127px;
+  inset-inline: 0;
+  bottom: calc(16px + var(--camera-safe-bottom));
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  z-index: 3;
+}
+.record-actions {
+  position: relative;
+}
+.record-actions .scroll-toggle {
+  position: absolute;
+  right: calc(100% + 16px);
+  top: 50%;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0f172acc;
+  border: 1px solid #ffffff20;
 }
 .camera-settings {
   position: absolute;
   left: 18px;
   right: 18px;
-  bottom: calc(325px + env(safe-area-inset-bottom));
+  bottom: calc(325px + var(--camera-safe-bottom));
   z-index: 5;
   border: 1px solid #ffffff20;
   background: #0f172af5;
@@ -1543,14 +1513,14 @@ select {
   .camera-stage .camera-intro {
     top: 13%;
   }
-  .camera-tools {
-    bottom: 240px;
+  .camera-stage {
+    --camera-tools-offset: 240px;
   }
   .record-controls {
-    bottom: 108px;
+    bottom: calc(108px + var(--camera-safe-bottom));
   }
   .camera-settings {
-    bottom: 290px;
+    bottom: calc(290px + var(--camera-safe-bottom));
   }
   .record-button {
     width: 68px;
@@ -1617,9 +1587,5 @@ select {
   .range-label,
   .select-label {
     font-size: 13px;
-  }
-  .script-select {
-    min-height: 40px;
-    font-size: 12px;
   }
 }

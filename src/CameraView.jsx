@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Camera,
-  Check,
-  ChevronDown,
+  AlignLeft,
   GripHorizontal,
-  Mic,
   Pause,
   Play,
   RotateCcw,
@@ -28,6 +26,10 @@ import {
   measureMicrophone,
 } from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
+
+// Keep the persisted 0–25 slider scale while allowing a wider physical range.
+const POSITION_MAX = 25;
+const PROMPT_TRAVEL = 0.34;
 
 export default function CameraView({
   script,
@@ -439,19 +441,55 @@ export default function CameraView({
     return () => cancelAnimationFrame(frame);
   }, [playing, script, settings.speed]);
   const drag = useRef(null);
+  const promptMinHeight =
+    44 + Math.max(64, Math.ceil(settings.size * 1.45) + 10);
+  function savePosition(next) {
+    setPosition(next);
+    updateSettings({ position: next });
+  }
   function adjustPosition(e) {
-    if (!drag.current) return;
-    const height = e.currentTarget.closest(".camera-stage").clientHeight;
-    setPosition(
-      Math.max(
-        0,
-        Math.min(
-          25,
-          drag.current.position + ((e.clientY - drag.current.y) / height) * 100,
-        ),
+    const gesture = drag.current;
+    if (gesture?.pointerId !== e.pointerId || !gesture.travel) return;
+    gesture.latest = Math.max(
+      0,
+      Math.min(
+        POSITION_MAX,
+        gesture.position +
+          ((e.clientY - gesture.y) * POSITION_MAX) / gesture.travel,
       ),
     );
+    setPosition(gesture.latest);
   }
+  function finishDrag(e) {
+    if (drag.current?.pointerId !== e.pointerId) return;
+    const { latest } = drag.current;
+    drag.current = null;
+    savePosition(latest);
+  }
+  const recording = state === "recording";
+  const scrollToggle = (
+    <button
+      className="scroll-toggle"
+      aria-label={playing ? "Pause scrolling" : "Start scrolling"}
+      disabled={!script}
+      onClick={() => {
+        offset.current = scroll.current?.scrollTop || 0;
+        setPlaying(!playing);
+      }}
+    >
+      {playing ? <Pause size={19} /> : <Play size={19} />}
+    </button>
+  );
+  const recordButton = (
+    <button
+      className={`record-button ${recording ? "recording" : ""}`}
+      aria-label={recording ? "Stop recording" : "Start recording"}
+      disabled={state !== "ready" && !recording}
+      onClick={recording ? stopRecording : prepareRecording}
+    >
+      <span />
+    </button>
+  );
   return (
     <main className="camera-stage">
       <div className="camera-frame">
@@ -483,83 +521,93 @@ export default function CameraView({
         />
       </div>
       <div className="camera-vignette" />
-      <header className="camera-header">
-        <span className="studio-wordmark">
-          <img
-            src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
-            alt=""
-          />
-          <small>CALLISTA STUDIO</small>
-        </span>
-        <span
-          className={`camera-status ${state === "recording" ? "live" : ""}`}
-        >
-          <span />
-          {state === "recording"
-            ? `REC ${formatTime(elapsed)}`
-            : "9:16 · PORTRAIT"}
-        </span>
-      </header>
       {source.current && (
-        <div className="prompter-area" style={{ top: `${position + 9}%` }}>
-          <button
-            className="script-select"
-            disabled={busy(state)}
-            onClick={choose}
-          >
-            {script?.title || "Select a script"}
-            <ChevronDown size={15} />
-          </button>
-          <div
-            className="prompter-panel"
-            style={{ background: `rgba(0,0,0,${settings.opacity / 100})` }}
-          >
+        <div
+          className="prompter-lane"
+          style={{
+            "--prompt-progress": position / POSITION_MAX,
+            "--prompt-travel-cap": `${PROMPT_TRAVEL * 100}dvh`,
+            "--prompt-min-height": `${promptMinHeight}px`,
+          }}
+        >
+          <div className="prompter-area">
             <div
-              className="prompter-scroll"
-              ref={scroll}
-              onWheel={() => {
-                setPlaying(false);
-                offset.current = scroll.current.scrollTop;
-              }}
-              onTouchStart={() => setPlaying(false)}
-              onTouchEnd={() => {
-                offset.current = scroll.current.scrollTop;
-              }}
-              style={{
-                fontSize: settings.size,
-                textAlign: settings.alignment,
-                height: `min(32dvh, max(64px, calc(${91 - position}dvh - 395px - env(safe-area-inset-bottom))))`,
-              }}
+              className="prompter-panel"
+              style={{ background: `rgba(0,0,0,${settings.opacity / 100})` }}
             >
-              {script?.content ||
-                "Your words belong here.\n\nSelect a script, or record a spontaneous moment."}
-              <div className="reading-space" />
+              <div
+                className="prompter-scroll"
+                ref={scroll}
+                onWheel={() => {
+                  setPlaying(false);
+                  offset.current = scroll.current.scrollTop;
+                }}
+                onTouchStart={() => setPlaying(false)}
+                onTouchEnd={() => {
+                  offset.current = scroll.current.scrollTop;
+                }}
+                style={{
+                  fontSize: settings.size,
+                  textAlign: settings.alignment,
+                }}
+              >
+                {script?.content ||
+                  "Your words belong here.\n\nSelect a script, or record a spontaneous moment."}
+                <div className="reading-space" />
+              </div>
+              <button
+                className="drag-handle"
+                aria-label="Drag text panel vertically"
+                title="Drag to move the script, or use the arrow keys"
+                onPointerDown={(e) => {
+                  if (!e.isPrimary) return;
+                  const lane = e.currentTarget.closest(".prompter-lane");
+                  const stage = lane.closest(".camera-stage");
+                  const travel = Math.max(
+                    0,
+                    Math.min(
+                      stage.clientHeight * PROMPT_TRAVEL,
+                      lane.clientHeight - promptMinHeight,
+                    ),
+                  );
+                  drag.current = {
+                    pointerId: e.pointerId,
+                    y: e.clientY,
+                    position,
+                    latest: position,
+                    travel,
+                  };
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={adjustPosition}
+                onPointerUp={finishDrag}
+                onPointerCancel={finishDrag}
+                onLostPointerCapture={finishDrag}
+                onKeyDown={(e) => {
+                  const next = {
+                    ArrowUp: Math.max(0, position - 1),
+                    ArrowDown: Math.min(POSITION_MAX, position + 1),
+                    Home: 0,
+                    End: POSITION_MAX,
+                  }[e.key];
+                  if (next === undefined) return;
+                  e.preventDefault();
+                  savePosition(next);
+                }}
+              >
+                <GripHorizontal size={23} />
+              </button>
             </div>
-            <button
-              className="drag-handle"
-              aria-label="Drag text panel vertically"
-              onPointerDown={(e) => {
-                drag.current = { y: e.clientY, position };
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerMove={adjustPosition}
-              onPointerUp={() => {
-                drag.current = null;
-                updateSettings({ position });
-              }}
-              onPointerCancel={() => {
-                drag.current = null;
-              }}
-            >
-              <GripHorizontal size={23} />
-            </button>
           </div>
         </div>
       )}
       {!source.current && (
         <div className="camera-intro">
           <span className="camera-intro-icon">
-            <Camera size={36} strokeWidth={1.2} />
+            <img
+              src={`${import.meta.env.BASE_URL}brand/callista-mark.png`}
+              alt="Callista Digital"
+            />
           </span>
           <p className="eyebrow">A LITTLE PREP. A GREAT TAKE.</p>
           <h1>
@@ -597,7 +645,7 @@ export default function CameraView({
           </button>
         </div>
       )}
-      {controls && (
+      {controls && !busy(state) && (
         <div className="camera-settings">
           <div className="camera-settings-heading">
             <strong>Your reading rhythm</strong>
@@ -639,13 +687,9 @@ export default function CameraView({
             <input
               type="range"
               min={0}
-              max={25}
+              max={POSITION_MAX}
               value={position}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                setPosition(next);
-                updateSettings({ position: next });
-              }}
+              onChange={(e) => savePosition(Number(e.target.value))}
             />
           </label>
           <label className="select-label">
@@ -684,7 +728,7 @@ export default function CameraView({
           </label>
         </div>
       )}
-      {source.current && (
+      {source.current && !busy(state) && (
         <div className="camera-tools">
           <button
             aria-label="Switch camera"
@@ -701,16 +745,7 @@ export default function CameraView({
             <SwitchCamera size={22} />
           </button>
           <div className="reading-tools">
-            <button
-              aria-label={playing ? "Pause scrolling" : "Start scrolling"}
-              disabled={!script}
-              onClick={() => {
-                offset.current = scroll.current?.scrollTop || 0;
-                setPlaying(!playing);
-              }}
-            >
-              {playing ? <Pause size={19} /> : <Play size={19} />}
-            </button>
+            {scrollToggle}
             <button
               aria-label="Restart script"
               onClick={() => {
@@ -727,37 +762,33 @@ export default function CameraView({
               <SlidersHorizontal size={19} />
             </button>
           </div>
-          <span className="mic-badge">
-            <Mic size={15} />
-            <Check size={12} />
-          </span>
+          <button
+            aria-label="Select script"
+            title={script?.title || "Select script"}
+            onClick={choose}
+          >
+            <AlignLeft size={22} />
+          </button>
         </div>
       )}
-      <div className="record-controls">
-        {state === "recording" && (
-          <span className="record-timer">● {formatTime(elapsed)}</span>
-        )}
-        <button
-          className={`record-button ${state === "recording" ? "recording" : ""}`}
-          aria-label={
-            state === "recording" ? "Stop recording" : "Start recording"
-          }
-          disabled={!["ready", "recording"].includes(state)}
-          onClick={state === "recording" ? stopRecording : prepareRecording}
-        >
-          <span />
-        </button>
-        <span className="record-caption">
-          {state === "recording"
-            ? "STOP RECORDING"
-            : state === "saving"
-              ? "SAVING YOUR TAKE…"
-              : "MAKE IT A GREAT TAKE"}
-        </span>
-        <small>
-          {source.current ? resolution : "PRIVATE. LOCAL. ALL YOURS."}
-        </small>
-      </div>
+      {recording ? (
+        <div className="active-recording-controls">
+          <span className="record-timer">● REC {formatTime(elapsed)}</span>
+          <div className="record-actions">
+            {scrollToggle}
+            {recordButton}
+          </div>
+        </div>
+      ) : state === "saving" ? (
+        <p className="active-recording-controls record-caption" role="status">
+          Saving your take…
+        </p>
+      ) : state !== "countdown" && source.current ? (
+        <div className="record-controls">
+          {recordButton}
+          <small>{resolution}</small>
+        </div>
+      ) : null}
       {state === "countdown" && (
         <div className="countdown-overlay">
           <strong>{count || "Go"}</strong>

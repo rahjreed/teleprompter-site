@@ -87,16 +87,12 @@
 .option-row { font-weight: 600; }
 .tag-form input, .rename-label input, select { background: #020617; border-color: rgb(255 255 255 / 10%); border-radius: 14px; }
 .toast { background: #0f172a; border-color: rgb(245 158 11 / 30%); border-radius: 24px; }
-.studio-wordmark { display: inline-flex; align-items: center; gap: 9px; font-family: inherit; font-style: normal; }
-.studio-wordmark img { width: 30px; height: 30px; border-radius: 9px; }
-.studio-wordmark small { margin: 0; color: #fff; font-family: inherit; font-weight: 900; font-size: 8px; letter-spacing: .2em; }
 .camera-intro h1 { color: #fff; font-weight: 900; text-transform: uppercase; letter-spacing: -.05em; line-height: .95; }
 .camera-intro .eyebrow { font-size: 8px; padding: 8px 12px; }
 .camera-intro-icon { background: #0f172a; border-radius: 24px; }
 .camera-settings { background: rgb(15 23 42 / 96%); border-radius: 28px; }
 .camera-settings-heading strong { text-transform: uppercase; font-weight: 900; letter-spacing: -.025em; }
-.camera-status, .record-caption { font-weight: 900; }
-.script-select { border-radius: 9999px; }
+.record-timer, .record-caption { font-weight: 900; }
 .prompter-scroll { color: #fff; font-weight: 400; }
 @media (max-width: 1184px) { .brand-bar { margin-left: 16px; margin-right: 16px; } }
 @media (max-width: 680px) {
