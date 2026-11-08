@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignLeft,
   ArrowUpRight,
@@ -22,7 +22,8 @@ import {
   X,
   Share2,
 } from "lucide-react";
-import { version } from "../package.json";
+import { VersionInfo } from "./VersionInfo";
+import { usePwaUpdate } from "./usePwaUpdate";
 import {
   defaults,
   filterScripts,
@@ -31,7 +32,7 @@ import {
   remove,
   storageStatus,
 } from "./storage";
-import { busy, fileName, formatTime } from "./media";
+import { busy, fileName, formatTime, videoMimeType } from "./media";
 import CameraView from "./CameraView";
 import { useInstallOffer } from "./useInstallOffer";
 import {
@@ -157,6 +158,8 @@ export default function App() {
     [newTag, setNewTag] = useState(""),
     [rename, setRename] = useState("");
   const installOffer = useInstallOffer();
+  const updateWaiting = usePwaUpdate();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const [diagnostics, setDiagnostics] = useState({});
   function recordDiagnostics(section, details) {
     console.info(`[${productName} recording]`, section, details);
@@ -281,7 +284,6 @@ export default function App() {
       setVideos((previous) =>
         previous.map((v) => (v.id === video.id ? { ...v, saved: true } : v)),
       );
-      setNotice("Take saved on this device. Download a copy to keep it safe.");
     } catch {
       setVideos((previous) =>
         previous.map((v) => (v.id === video.id ? { ...v, unsaved: true } : v)),
@@ -301,23 +303,6 @@ export default function App() {
     a.download = fileName(video);
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-  async function share(video) {
-    const file = new File([video.blob], fileName(video), {
-      type: video.blob.type,
-    });
-    if (!navigator.canShare?.({ files: [file] })) {
-      download(video);
-      return setNotice(
-        "Device sharing is unavailable here. Your download is ready.",
-      );
-    }
-    try {
-      await navigator.share({ files: [file], title: video.title });
-    } catch (e) {
-      if (e.name !== "AbortError")
-        setNotice("Sharing failed. Use Download to keep this take.");
-    }
   }
   async function deleteItem(store, item) {
     try {
@@ -706,6 +691,15 @@ export default function App() {
           </IconButton>
         </div>
       )}
+      {updateWaiting && !updateDismissed && !notice && !modal && !editor &&
+        view !== "camera" && !busy(recordState) && (
+          <div className="toast" role="status">
+            <span>Update ready. Close all app windows and reopen when convenient.</span>
+            <IconButton label="Dismiss update notification" onClick={() => setUpdateDismissed(true)}>
+              <X size={17} />
+            </IconButton>
+          </div>
+        )}
       {editor && !modal && (
         <Sheet
           title="Script editor"
@@ -958,9 +952,12 @@ export default function App() {
               >
                 <Info size={18} /> About {productName}
               </button>
-              <p className="fine-print settings-version">
-                Version {version.replace(/^(\d+\.\d+)\.0$/, "$1")}
-              </p>
+              {updateWaiting && (
+                <p className="fine-print" role="status">
+                  Update ready. When you finish recording, close all app windows and reopen online.
+                </p>
+              )}
+              <VersionInfo />
             </div>
           )}
           {modal.type === "about" && (
@@ -968,7 +965,7 @@ export default function App() {
               <img src={mascot} alt="Illustrated portrait of Mr. Prompterson" />
               <h3>{productName} — Video Teleprompter</h3>
               <p>{tagline}</p>
-              <p className="fine-print">{attribution}</p>
+              <VersionInfo />
             </div>
           )}
           {modal.type === "tags" && (
@@ -1147,10 +1144,12 @@ export default function App() {
                 <Download />
                 Download video
               </button>
-              <button className="option-row" onClick={() => share(modal.video)}>
-                <Share2 />
-                Share video
-              </button>
+              <VideoShareButton
+                video={modal.video}
+                download={download}
+                alert={setNotice}
+                option
+              />
               <button
                 className="option-row danger-text"
                 onClick={() =>
@@ -1184,7 +1183,9 @@ export default function App() {
             <Playback
               video={videos.find((v) => v.id === modal.video.id) || modal.video}
               download={download}
-              share={share}
+              alert={setNotice}
+              recordAgain={view === "camera" ? () => setModal(null) : undefined}
+              saving={recordState === "saving"}
             />
           )}
         </Sheet>
@@ -1192,7 +1193,7 @@ export default function App() {
     </div>
   );
 }
-function Playback({ video, download, share }) {
+function Playback({ video, download, alert, recordAgain, saving }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     const next = URL.createObjectURL(video.blob);
@@ -1214,21 +1215,59 @@ function Playback({ video, download, share }) {
           This take’s saved dimensions differ from 9:16.
         </p>
       )}
-      <p className="fine-print">
-        {video.unsaved
-          ? "Not saved locally. Download this take before closing."
-          : "Keep a downloaded copy. Browser data can be cleared."}
-      </p>
+      {video.unsaved && (
+        <p className="fine-print">Not saved locally. Download this take before closing.</p>
+      )}
       <div className="button-pair">
         <button className="primary-button" onClick={() => download(video)}>
           <Download size={18} />
           Download
         </button>
-        <button className="secondary-button" onClick={() => share(video)}>
-          <Share2 size={18} />
-          Share
-        </button>
+        <VideoShareButton video={video} download={download} alert={alert} />
       </div>
+      {recordAgain && (
+        <button className="secondary-button" onClick={recordAgain} disabled={saving}>
+          Record Again
+        </button>
+      )}
     </>
+  );
+}
+
+function VideoShareButton({ video, download, alert, option = false }) {
+  const name = fileName(video);
+  const type = videoMimeType(video);
+  const blob = video.blob;
+  const file = useMemo(
+    () => typeof File === "function" ? new File([blob], name, { type }) : null,
+    [blob, name, type],
+  );
+  const sharing = useRef(false);
+
+  async function share() {
+    if (sharing.current) return;
+    const data = { files: [file] };
+    try {
+      if (!file || typeof navigator.share !== "function" ||
+          (typeof navigator.canShare === "function" && !navigator.canShare(data))) {
+        download(video);
+        return;
+      }
+      sharing.current = true;
+      await navigator.share(data);
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        alert("This video could not be shared here. Use Download to save a copy.");
+      }
+    } finally {
+      sharing.current = false;
+    }
+  }
+
+  return (
+    <button className={option ? "option-row" : "secondary-button"} onClick={share}>
+      <Share2 size={option ? 24 : 18} />
+      {option ? "Share video" : "Share"}
+    </button>
   );
 }

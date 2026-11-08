@@ -16,6 +16,15 @@ test("production app installs an offline shell and retrieves scripts offline", a
   const manifest = await page.evaluate(async () =>
     (await fetch("manifest.webmanifest")).json(),
   );
+  const release = await page.evaluate(async () => (await fetch("release.json")).json());
+  expect(release.version).toBe(process.env.PROMPTER_RELEASE_VERSION ?? "1.3");
+  expect(release.channel).toBe(process.env.PROMPTER_RELEASE_VERSION ? "production" : "local");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByText(`Version ${release.version}`, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "About Mr. Prompterson" }).click();
+  await expect(page.getByRole("dialog").getByText(`Version ${release.version}`, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole('button', { name: 'Close dialog' }).click();
   expect(manifest.name).toBe("Mr. Prompterson");
   expect(manifest.short_name).toBe("Mr. Prompterson");
   expect(manifest.id).toBe("./");

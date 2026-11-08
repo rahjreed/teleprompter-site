@@ -177,3 +177,18 @@ test("recording blobs survive IndexedDB storage", async () => {
   assert.equal(await result.blob.text(), "footage");
   await remove("videos", result.id);
 });
+
+test("production releases are sequential and retries reuse the reserved version", async () => {
+  const { planRelease } = await import("../scripts/release-version.mjs");
+  const first = planRelease(null, null, null, "first");
+  assert.deepEqual(first, { version: "1.4", commit: "first", published: false });
+  assert.deepEqual(planRelease(first, first, null, "first"), first);
+  assert.throws(() => planRelease(first, null, null, "second"), /pending release/);
+  assert.equal(planRelease(first, first, first, "first").published, true);
+
+  const second = planRelease(first, null, first, "second");
+  assert.equal(second.version, "1.5");
+  assert.deepEqual(planRelease(second, second, first, "second"), second);
+  assert.throws(() => planRelease(second, first, second, "first"), /older release/);
+  assert.throws(() => planRelease(second, second, { ...second, commit: "wrong" }, "second"), /does not match/);
+});

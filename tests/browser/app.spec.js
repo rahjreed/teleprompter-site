@@ -107,6 +107,8 @@ test("countdown cancellation, camera+audio recording, portrait export, playback,
   expect(metadata.width / metadata.height).toBeCloseTo(9 / 16, 2);
   expect(metadata.audio).toBe(1);
   const download = page.waitForEvent("download");
+  await expect(page.getByText(/Take saved on this device/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Record Again", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Download", exact: true }).click();
   expect((await download).suggestedFilename()).toMatch(/\.(mp4|webm)$/);
   await page.getByRole("button", { name: "Close dialog" }).click();
