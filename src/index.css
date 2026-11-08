@@ -755,6 +755,8 @@ select {
   gap: 16px;
 }
 .settings-version {
+  display: grid;
+  gap: 4px;
   border-top: 1px solid var(--border);
   padding-top: 16px;
   text-align: center;

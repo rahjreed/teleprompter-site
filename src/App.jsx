@@ -22,7 +22,8 @@ import {
   X,
   Share2,
 } from "lucide-react";
-import { version } from "../package.json";
+import { VersionInfo } from "./VersionInfo";
+import { usePwaUpdate } from "./usePwaUpdate";
 import {
   defaults,
   filterScripts,
@@ -157,6 +158,8 @@ export default function App() {
     [newTag, setNewTag] = useState(""),
     [rename, setRename] = useState("");
   const installOffer = useInstallOffer();
+  const updateWaiting = usePwaUpdate();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const [diagnostics, setDiagnostics] = useState({});
   function recordDiagnostics(section, details) {
     console.info(`[${productName} recording]`, section, details);
@@ -706,6 +709,15 @@ export default function App() {
           </IconButton>
         </div>
       )}
+      {updateWaiting && !updateDismissed && !notice && !modal && !editor &&
+        view !== "camera" && !busy(recordState) && (
+          <div className="toast" role="status">
+            <span>Update ready. Close all app windows and reopen when convenient.</span>
+            <IconButton label="Dismiss update notification" onClick={() => setUpdateDismissed(true)}>
+              <X size={17} />
+            </IconButton>
+          </div>
+        )}
       {editor && !modal && (
         <Sheet
           title="Script editor"
@@ -958,9 +970,12 @@ export default function App() {
               >
                 <Info size={18} /> About {productName}
               </button>
-              <p className="fine-print settings-version">
-                Version {version.replace(/^(\d+\.\d+)\.0$/, "$1")}
-              </p>
+              {updateWaiting && (
+                <p className="fine-print" role="status">
+                  Update ready. When you finish recording, close all app windows and reopen online.
+                </p>
+              )}
+              <VersionInfo />
             </div>
           )}
           {modal.type === "about" && (
@@ -968,7 +983,7 @@ export default function App() {
               <img src={mascot} alt="Illustrated portrait of Mr. Prompterson" />
               <h3>{productName} — Video Teleprompter</h3>
               <p>{tagline}</p>
-              <p className="fine-print">{attribution}</p>
+              <VersionInfo />
             </div>
           )}
           {modal.type === "tags" && (

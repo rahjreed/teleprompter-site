@@ -76,3 +76,13 @@ The rebrand uses the same site address, manifest identity, start URL, and Indexe
 After the updated build is published, finish any recording, close all app windows and browser tabs for the site, then reopen it online. This lets the new service worker take over. Launcher icon and name updates are handled separately by the browser and OS, so they can take longer than the in-app update. Chrome for Android can update an installed app in place. [Chrome manifest update behavior](https://web.dev/articles/manifest-updates)
 
 Try the in-place update first. **Before uninstalling or clearing site data, copy any scripts you need and download your recordings.** A browser or operating system can remove locally stored data when an app is removed. Some browsers or Home Screen shortcuts may require a fresh install for a new launcher icon. Back up your work before replacing the old shortcut or app.
+
+## Production releases
+
+GitHub Actions publishes new commits on `main` to the existing Vercel production project. Set up the GitHub `production` environment with a `VERCEL_TOKEN` secret and `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` variables before merging this workflow. Confirm these IDs point to the project serving `teleprompter.callistadigital.com`. This repo disables Vercel Git deployments for `main` to leave production promotion to the workflow. Other branches retain their Vercel previews.
+
+`package.json` supplies the original 1.3 baseline. The workflow stages a successful production build, records its commit with a `production/v1.4` tag (then `production/v1.5`, etc.), promotes it, and checks `/release.json` on the production domain. Treat these tags as immutable. Local and preview builds show the baseline and their build channel/commit and never allocate tags. The browser version and diagnostic endpoint are generated from the same metadata.
+
+If promotion fails after the tag is pushed, rerun the original workflow to finish that release with the same version. Later releases wait for the pending release. After a dashboard rollback, restore the latest tagged deployment before publishing another version. Publish through this workflow so the live deployment and version tags remain in sync.
+
+An installed PWA keeps its active app shell until all of its tabs and windows close. When the app reports an update, finish any recording, close all copies of the app, and reopen online. The update replaces app shell caches and preserves recordings, scripts, and preferences.
