@@ -15,6 +15,7 @@ import {
   framingScale,
   formatTime,
   inspectRecording,
+  cameraPermission,
   mediaError,
   portraitStream,
   requestCamera,
@@ -56,6 +57,8 @@ export default function CameraView({
     started = useRef(0),
     wake = useRef(null),
     callbacks = useRef({});
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [introComplete, setIntroComplete] = useState(false);
   const [state, setState] = useState("idle"),
     [error, setError] = useState(""),
     [count, setCount] = useState(3),
@@ -110,7 +113,7 @@ export default function CameraView({
     }
   }
   async function enable(patch = {}) {
-    if (busy(stateRef.current)) return;
+    if (busy(stateRef.current) || stateRef.current === "requesting") return;
     const token = ++generation.current;
     stopTracks();
     setError("");
@@ -160,6 +163,12 @@ export default function CameraView({
             setDevices(items.filter((d) => d.kind === "videoinput")),
         )
         .catch(() => {});
+      setIntroComplete(true);
+      try {
+        localStorage.setItem("prompterson-camera-intro-complete", "1");
+      } catch {
+        // Capture still works when browser storage is unavailable.
+      }
       transition("ready");
     } catch (e) {
       if (mounted.current && token === generation.current) {
@@ -341,6 +350,24 @@ export default function CameraView({
   }
   useEffect(() => {
     mounted.current = true;
+    let cancelled = false;
+    let remembered = false;
+    try {
+      remembered = localStorage.getItem("prompterson-camera-intro-complete") === "1";
+    } catch {
+      // Permission checks still work when browser storage is unavailable.
+    }
+    cameraPermission().then((permission) => {
+      if (cancelled) return;
+      setIntroComplete(remembered || permission === "granted");
+      setCheckingAccess(false);
+      if (permission === "granted" || (permission === "unknown" && remembered)) {
+        enable();
+      } else if (permission === "denied") {
+        setError(mediaError({ name: "NotAllowedError" }));
+        transition("error");
+      }
+    });
     const interrupted = () => {
       if (document.visibilityState === "hidden") {
         cancelCountdown();
@@ -366,6 +393,7 @@ export default function CameraView({
     document.addEventListener("visibilitychange", interrupted);
     window.addEventListener("pagehide", pagehide);
     return () => {
+      cancelled = true;
       mounted.current = false;
       generation.current++;
       clearInterval(timer.current);
@@ -602,14 +630,18 @@ export default function CameraView({
           </div>
         </div>
       )}
-      {!source.current && (
+      {!source.current && !checkingAccess && !error && (
         <div className="camera-intro">
-          <span className="camera-intro-icon">
-            <img src={mascot} alt="Mr. Prompterson" />
-          </span>
-          <p className="eyebrow">{attribution}</p>
-          <h1>{productName}</h1>
-          <p>{tagline}</p>
+          {!introComplete && (
+            <>
+              <span className="camera-intro-icon">
+                <img src={mascot} alt="Mr. Prompterson" />
+              </span>
+              <p className="eyebrow">{attribution}</p>
+              <h1>{productName}</h1>
+              <p>{tagline}</p>
+            </>
+          )}
           <button
             className="primary-button"
             onClick={() => enable()}
@@ -618,7 +650,7 @@ export default function CameraView({
             <Camera size={18} />
             {state === "requesting" ? "Opening camera…" : "Enable camera & mic"}
           </button>
-          <small>Camera and microphone access stay on your device.</small>
+          {!introComplete && <small>Camera and microphone access stay on your device.</small>}
         </div>
       )}
       {error && (

@@ -62,6 +62,19 @@ export function mediaError(error) {
     "The camera could not start."
   );
 }
+export async function cameraPermission(permissions = globalThis.navigator?.permissions) {
+  const states = await Promise.all(["camera", "microphone"].map(async (name) => {
+    try {
+      return (await permissions?.query({ name }))?.state;
+    } catch {
+      return undefined;
+    }
+  }));
+  if (states.includes("denied")) return "denied";
+  if (states.includes("prompt")) return "prompt";
+  return states.every((state) => state === "granted") ? "granted" : "unknown";
+}
+
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
@@ -293,5 +306,11 @@ export function inspectRecording(blob) {
   });
 }
 export function fileName(recording) {
-  return `${recording.title.replace(/[^a-z0-9 _-]/gi, "").trim() || "Mr Prompterson recording"}.${recording.blob.type.includes("mp4") ? "mp4" : "webm"}`;
+  return `${recording.title.replace(/[^a-z0-9 _-]/gi, "").trim() || "Mr Prompterson recording"}.${videoMimeType(recording) === "video/mp4" ? "mp4" : "webm"}`;
+}
+
+export function videoMimeType(recording) {
+  return /^(?:video|application)\/mp4(?:;|$)/i.test(recording.blob.type || recording.mimeType || "")
+    ? "video/mp4"
+    : "video/webm";
 }

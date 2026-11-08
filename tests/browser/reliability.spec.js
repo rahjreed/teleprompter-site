@@ -443,3 +443,101 @@ test("settings persist and mobile/desktop layouts fit without horizontal overflo
     ),
   ).toBe(true);
 });
+
+test("camera entry distinguishes browser access from remembered onboarding", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.captureCalls = 0;
+    window.capturePermission = "prompt";
+    const query = navigator.permissions.query.bind(navigator.permissions);
+    navigator.permissions.query = ({ name }) => {
+      if (!["camera", "microphone"].includes(name)) return query({ name });
+      if (window.capturePermission === "unknown") return Promise.reject(new TypeError());
+      return Promise.resolve({ state: window.capturePermission });
+    };
+    const open = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+      window.captureCalls++;
+      return open(constraints);
+    };
+  });
+  await page.goto("/");
+  const camera = page.getByRole("button", { name: "Open camera", exact: true });
+  const scripts = page.getByRole("button", { name: "Scripts", exact: true });
+  const enable = page.getByRole("button", { name: "Enable camera & mic" });
+  const ready = page.getByRole("button", { name: "Start recording", exact: true });
+
+  await camera.click();
+  await expect(enable).toBeVisible();
+  expect(await page.evaluate(() => window.captureCalls)).toBe(0);
+  await enable.click();
+  await expect(ready).toBeEnabled();
+  await scripts.click();
+
+  await page.evaluate(() => { window.capturePermission = "granted"; });
+  await camera.click();
+  await expect(ready).toBeEnabled();
+  await expect(enable).toHaveCount(0);
+  expect(await page.evaluate(() => window.captureCalls)).toBe(2);
+  await scripts.click();
+
+  await page.evaluate(() => { window.capturePermission = "unknown"; });
+  await camera.click();
+  await expect(ready).toBeEnabled();
+  expect(await page.evaluate(() => window.captureCalls)).toBe(3);
+  await scripts.click();
+
+  await page.evaluate(() => { window.capturePermission = "denied"; });
+  await camera.click();
+  await expect(page.getByRole("alert")).toContainText("browser’s site settings");
+  expect(await page.evaluate(() => window.captureCalls)).toBe(3);
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(ready).toBeEnabled();
+  expect(await page.evaluate(() => window.captureCalls)).toBe(4);
+});
+
+test("saved MP4 shares as a file, cancellation stays quiet, and unsupported sharing downloads", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.shareMode = "cancel";
+    Object.defineProperty(navigator, "canShare", {
+      configurable: true,
+      value: () => window.shareMode !== "unsupported",
+    });
+    Object.defineProperty(navigator, "share", {
+      value: ({ files, url }) => {
+        const [file] = files;
+        window.sharedVideo = {
+          name: file.name, type: file.type, size: file.size, url,
+          active: navigator.userActivation.isActive,
+        };
+        return Promise.reject(new DOMException("Cancelled", "AbortError"));
+      },
+    });
+  });
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const { put } = await import("/src/storage.js");
+    await put("videos", {
+      id: "previous-mp4",
+      title: "Previous MP4",
+      duration: 1,
+      created: Date.now(),
+      blob: new Blob(["recorded bytes"], { type: "video/mp4;codecs=avc1,mp4a.40.2" }),
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Videos", exact: true }).click();
+  await page.getByRole("button", { name: /Previous MP4/ }).first().click();
+  const share = page.getByRole("button", { name: "Share", exact: true });
+  await share.click();
+  expect(await page.evaluate(() => window.sharedVideo)).toEqual({
+    name: "Previous MP4.mp4", type: "video/mp4", size: 14, active: true,
+  });
+  await expect(page.getByText(/This video could not be shared/)).toHaveCount(0);
+
+  await page.evaluate(() => { window.shareMode = "unsupported"; });
+  const pendingDownload = page.waitForEvent("download");
+  await share.click();
+  expect((await pendingDownload).suggestedFilename()).toBe("Previous MP4.mp4");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.getByRole("heading", { name: "Previous MP4" })).toBeVisible();
+});
