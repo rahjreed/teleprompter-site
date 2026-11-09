@@ -34,6 +34,8 @@ import {
 } from "./storage";
 import { busy, fileName, formatTime, videoMimeType } from "./media";
 import { isAppleMobile, saveRecordingToDevice } from "./videoSave";
+import { finalizeMp4 } from "./mp4Repair";
+import { inspectRecording } from "./media";
 import CameraView from "./CameraView";
 import { useInstallOffer } from "./useInstallOffer";
 import {
@@ -305,6 +307,34 @@ export default function App() {
       }
     } catch (error) {
       setNotice(error.message || "Video could not be saved. Try Share instead.");
+    }
+  }
+  async function repairVideo(video) {
+    setNotice("Checking the original video for recoverable footage…");
+    try {
+      const { blob, duration } = await finalizeMp4(video.blob);
+      if (blob === video.blob || duration <= video.duration + 2) {
+        setNotice("No additional footage was detected. The original recording has not been changed.");
+        return;
+      }
+      const { mediaDuration, ...metadata } = await inspectRecording(blob);
+      const repaired = {
+        ...video,
+        id: crypto.randomUUID(),
+        title: `${video.title} (repaired)`,
+        created: Date.now(),
+        blob,
+        duration,
+        ...metadata,
+        verified: Boolean(metadata.width && metadata.height),
+        needsRepair: false,
+      };
+      await put("videos", repaired);
+      setVideos((items) => [repaired, ...items]);
+      setModal({ type: "play", video: repaired });
+      setNotice(`Recovered a ${Math.round(duration)}-second MP4. Your original recording was preserved.`);
+    } catch (error) {
+      setNotice(error.message || "Could not repair the recording. The original was preserved.");
     }
   }
   async function deleteItem(store, item) {
@@ -1185,6 +1215,7 @@ export default function App() {
           {modal.type === "play" && (
             <Playback
               video={videos.find((v) => v.id === modal.video.id) || modal.video}
+              repair={repairVideo}
               download={download}
               alert={setNotice}
               recordAgain={view === "camera" ? () => setModal(null) : undefined}
@@ -1196,7 +1227,7 @@ export default function App() {
     </div>
   );
 }
-function Playback({ video, download, alert, recordAgain, saving }) {
+function Playback({ video, download, repair, alert, recordAgain, saving }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     const next = URL.createObjectURL(video.blob);
@@ -1220,6 +1251,16 @@ function Playback({ video, download, alert, recordAgain, saving }) {
       )}
       {video.unsaved && (
         <p className="fine-print">Not saved locally. Download this take before closing.</p>
+      )}
+      {video.needsRepair && (
+        <p className="fine-print" role="alert">
+          The duration could not be verified. Keep the original and try repairing it.
+        </p>
+      )}
+      {videoMimeType(video) === "video/mp4" && (
+        <button className="secondary-button" onClick={() => repair(video)}>
+          Repair short MP4 recording
+        </button>
       )}
       <div className="button-pair">
         <button className="primary-button" onClick={() => download(video)}>
