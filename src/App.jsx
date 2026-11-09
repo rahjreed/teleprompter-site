@@ -33,6 +33,7 @@ import {
   storageStatus,
 } from "./storage";
 import { busy, fileName, formatTime, videoMimeType } from "./media";
+import { isAppleMobile, saveRecordingToDevice } from "./videoSave";
 import CameraView from "./CameraView";
 import { useInstallOffer } from "./useInstallOffer";
 import {
@@ -296,13 +297,15 @@ export default function App() {
       .then(setStorage)
       .catch(() => {});
   }
-  function download(video) {
-    const url = URL.createObjectURL(video.blob),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = fileName(video);
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  async function download(video) {
+    try {
+      const result = await saveRecordingToDevice(video);
+      if (result === "download" && isAppleMobile()) {
+        setNotice("If iPhone opens a video preview, use Share to choose Save Video or Save to Files.");
+      }
+    } catch (error) {
+      setNotice(error.message || "Video could not be saved. Try Share instead.");
+    }
   }
   async function deleteItem(store, item) {
     try {
@@ -1142,7 +1145,7 @@ export default function App() {
                 onClick={() => download(modal.video)}
               >
                 <Download />
-                Download video
+                {isAppleMobile() ? "Save video to iPhone" : "Download video"}
               </button>
               <VideoShareButton
                 video={modal.video}
@@ -1221,7 +1224,7 @@ function Playback({ video, download, alert, recordAgain, saving }) {
       <div className="button-pair">
         <button className="primary-button" onClick={() => download(video)}>
           <Download size={18} />
-          Download
+          {isAppleMobile() ? "Save to iPhone" : "Download"}
         </button>
         <VideoShareButton video={video} download={download} alert={alert} />
       </div>
