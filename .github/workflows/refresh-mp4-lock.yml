@@ -1,0 +1,31 @@
+name: Refresh MP4 repair lockfile (temporary)
+on:
+  push:
+    branches: [fix/full-duration-mp4]
+    paths:
+      - package.json
+      - .github/workflows/refresh-mp4-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    if: github.repository == 'rahjreed/teleprompter-site'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/full-duration-mp4
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve and lock dependencies without running package scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile to this feature branch
+        run: |
+          git add package-lock.json
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Lock browser MP4 repair dependency"
+          git push origin HEAD:fix/full-duration-mp4
