@@ -276,7 +276,7 @@ export default function CameraView({
             );
           }
           const { mediaDuration, ...metadata } = await inspectRecording(blob);
-          if (!needsRepair && (!/^video\\/mp4(?:;|$)/i.test(blob.type)) && mediaDuration > 0)
+          if (!needsRepair && (!/^video\/mp4(?:;|$)/i.test(blob.type)) && mediaDuration > 0)
             duration = mediaDuration;
           const verified = Boolean(metadata.width && metadata.height);
           callbacks.current.onDiagnostics?.("export", {
