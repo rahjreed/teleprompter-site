@@ -192,3 +192,62 @@ test("production releases are sequential and retries reuse the reserved version"
   assert.throws(() => planRelease(second, first, second, "first"), /older release/);
   assert.throws(() => planRelease(second, second, { ...second, commit: "wrong" }, "second"), /does not match/);
 });
+
+test("iPhone saves a recording through the native file share sheet", async () => {
+  const { saveRecordingToDevice, isAppleMobile } = await import("../src/videoSave.js");
+  const video = { title: "Hello", blob: new Blob(["video"], { type: "video/mp4" }) };
+  const shared = [];
+  const nav = {
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X)",
+    canShare: (data) => data.files[0].type === "video/mp4",
+    share: async (data) => { shared.push(data); },
+  };
+  let anchorClicks = 0;
+  const documentRef = {
+    createElement: () => ({ style: {}, click: () => anchorClicks++, remove: () => {} }),
+    body: { appendChild: () => {} },
+  };
+  assert.equal(isAppleMobile(nav), true);
+  assert.equal(await saveRecordingToDevice(video, { nav, documentRef }), "shared");
+  assert.equal(shared.length, 1);
+  assert.equal(shared[0].files[0].name, "Hello.mp4");
+  assert.equal(anchorClicks, 0);
+});
+
+test("iPhone canceled save leaves the recording untouched", async () => {
+  const { saveRecordingToDevice } = await import("../src/videoSave.js");
+  const blob = new Blob(["video"], { type: "video/mp4" });
+  const video = { title: "Recording", blob };
+  const nav = {
+    userAgent: "iPhone",
+    canShare: () => true,
+    share: async () => { throw Object.assign(new Error("Canceled"), { name: "AbortError" }); },
+  };
+  assert.equal(await saveRecordingToDevice(video, { nav }), "cancelled");
+  assert.equal(video.blob, blob);
+});
+
+test("Android keeps the direct-download behavior", async () => {
+  const { saveRecordingToDevice } = await import("../src/videoSave.js");
+  const video = { title: "Test take", blob: new Blob(["video"], { type: "video/mp4" }) };
+  let clicks = 0;
+  let downloadedName;
+  const anchor = {
+    style: {},
+    click: () => { clicks++; downloadedName = anchor.download; },
+    remove: () => {},
+  };
+  const nav = { userAgent: "Mozilla/5.0 (Linux; Android 16)" };
+  const urlAPI = {
+    createObjectURL: () => "blob:video",
+    revokeObjectURL: () => {},
+  };
+  const result = await saveRecordingToDevice(video, {
+    nav, urlAPI,
+    documentRef: { createElement: () => anchor, body: { appendChild: () => {} } },
+    defer: () => {},
+  });
+  assert.equal(result, "download");
+  assert.equal(clicks, 1);
+  assert.equal(downloadedName, "Test take.mp4");
+});

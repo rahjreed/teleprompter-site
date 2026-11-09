@@ -30,7 +30,7 @@ if [[ "$published" == true ]]; then
 fi
 
 vc() {
-  npx --yes vercel@48 "$@" --token "$VERCEL_TOKEN"
+  npx --yes vercel@48 "$@" --scope roger-reeds-projects --token "$VERCEL_TOKEN"
 }
 
 deployment=$(vc deploy --yes --prod --skip-domain \
