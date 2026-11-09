@@ -402,10 +402,7 @@ export default function App() {
               <Plus size={18} /> New script
             </button>
           </div>
-          {ready &&
-            !search &&
-            !tag &&
-            scripts.every((script) => script.id === starter.id) && (
+          {ready && (
               <section
                 className="product-welcome"
                 aria-label={`Welcome to ${productName}`}
