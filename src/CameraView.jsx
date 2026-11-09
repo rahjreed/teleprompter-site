@@ -27,6 +27,7 @@ import {
   measureMicrophone,
 } from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
+import { finalizeMp4 } from "./mp4Repair";
 import { attribution, mascot, productName, tagline } from "./brand";
 
 // Keep the persisted 0–25 slider scale while allowing a wider physical range.
@@ -248,10 +249,10 @@ export default function CameraView({
         output.current?.cleanup();
         output.current = null;
         recorder.current = null;
-        const blob = new Blob(chunks, {
+        const rawBlob = new Blob(chunks, {
           type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
-        if (!blob.size) {
+        if (!rawBlob.size) {
           if (mounted.current) {
             transition("ready");
             setError("No footage was captured. Please try again.");
@@ -260,8 +261,23 @@ export default function CameraView({
           return;
         }
         try {
+          let blob = rawBlob;
+          let duration = elapsed;
+          let needsRepair = false;
+          try {
+            const finalized = await finalizeMp4(rawBlob, elapsed);
+            blob = finalized.blob;
+            if (finalized.duration != null) duration = finalized.duration;
+          } catch (repairError) {
+            needsRepair = true;
+            reportError("mp4-finalization", repairError);
+            callbacks.current.alert(
+              `Video finalization needs attention: ${repairError.message} The original recording was saved in your library.`,
+            );
+          }
           const { mediaDuration, ...metadata } = await inspectRecording(blob);
-          const duration = mediaDuration > 0 ? mediaDuration : elapsed;
+          if (!needsRepair && (!/^video\\/mp4(?:;|$)/i.test(blob.type)) && mediaDuration > 0)
+            duration = mediaDuration;
           const verified = Boolean(metadata.width && metadata.height);
           callbacks.current.onDiagnostics?.("export", {
             width: metadata.width ?? null,
@@ -273,7 +289,8 @@ export default function CameraView({
             averageFileBitsPerSecond:
               duration > 0 ? Math.round((blob.size * 8) / duration) : null,
             durationSource:
-              mediaDuration > 0 ? "decoded file" : "recording timer",
+              needsRepair ? "unverified capture timer" : "finalized media timeline",
+            needsRepair,
             microphoneLevels,
           });
           const item = {
@@ -286,6 +303,7 @@ export default function CameraView({
             blob,
             ...metadata,
             verified,
+            needsRepair,
           };
           await callbacks.current.onRecorded(item);
         } catch (error) {
