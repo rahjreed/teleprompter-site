@@ -25,6 +25,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install FFmpeg for MP4 regression tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: npm test
       - run: bash scripts/publish-production.sh
         env:
