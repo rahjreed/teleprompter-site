@@ -34,15 +34,15 @@ async function describe(blob) {
   return JSON.parse(result.toString());
 }
 
-test("fragmented 9-second MP4 is finalized with full duration, audio and video", async () => {
-  const original = fragmentedVideo(9);
+test("fragmented 35-second MP4 is finalized with full duration, audio and video", async () => {
+  const original = fragmentedVideo(35);
   const originalBytes = await original.arrayBuffer();
-  const result = await finalizeMp4(original, 9);
+  const result = await finalizeMp4(original, 35);
   assert.equal(result.repaired, true);
   assert.equal(result.blob.type, "video/mp4");
-  assert.ok(result.duration >= 8.5 && result.duration <= 9.6, `actual ${result.duration}`);
+  assert.ok(result.duration >= 34.5 && result.duration <= 35.6, `actual ${result.duration}`);
   const info = await describe(result.blob);
-  assert.ok(Number(info.format.duration) >= 8.5, `probe: ${JSON.stringify(info)}`);
+  assert.ok(Number(info.format.duration) >= 34.5, `probe: ${JSON.stringify(info)}`);
   assert.ok(info.streams.some((s) => s.codec_type === "video"));
   assert.ok(info.streams.some((s) => s.codec_type === "audio"));
   assert.equal(original.size, originalBytes.byteLength, "Original Blob remains unchanged");
