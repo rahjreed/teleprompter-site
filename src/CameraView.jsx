@@ -28,7 +28,6 @@ import {
 } from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
 import { finalizeMp4 } from "./mp4Repair";
-import { isAppleMobile } from "./videoSave";
 import { attribution, mascot, productName, tagline } from "./brand";
 
 // Keep the persisted 0–25 slider scale while allowing a wider physical range.
@@ -71,9 +70,6 @@ export default function CameraView({
     [devices, setDevices] = useState([]),
     [resolution, setResolution] = useState(""),
     [front, setFront] = useState(true);
-  // Avoid discarding the sides of iPhone selfie camera images.
-  // The export uses this same fit, so preview and saved video agree.
-  const wideSelfie = isAppleMobile() && front && settings.framing === "standard";
   callbacks.current = {
     onRecorded,
     onState,
@@ -125,9 +121,7 @@ export default function CameraView({
     transition("requesting");
     try {
       const prefs = { ...callbacks.current.settings, ...patch };
-      const stream = await requestCamera(prefs, navigator.mediaDevices, {
-        preferWideSelfie: isAppleMobile() && prefs.facing === "user",
-      });
+      const stream = await requestCamera(prefs);
       if (!mounted.current || token !== generation.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -203,7 +197,6 @@ export default function CameraView({
         source.current,
         preferences.quality,
         preferences.framing,
-        wideSelfie,
       );
       output.current = take;
       if (onDiagnostics) {
@@ -550,10 +543,7 @@ export default function CameraView({
         <video
           ref={video}
           className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
-          style={{
-            "--framing-scale": framingScale(settings.framing),
-            objectFit: wideSelfie ? "contain" : "cover",
-          }}
+          style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {
             const take = output.current;
             if (
@@ -836,7 +826,7 @@ export default function CameraView({
       ) : state !== "countdown" && source.current ? (
         <div className="record-controls">
           {recordButton}
-          <small>{wideSelfie ? "Wide selfie · " : ""}{resolution}</small>
+          <small>{resolution}</small>
         </div>
       ) : null}
       {state === "countdown" && (

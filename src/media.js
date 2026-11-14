@@ -78,16 +78,14 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
-  { preferWideSelfie = false } = {},
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
       "Camera access needs HTTPS and a supported browser. Use HTTPS or localhost.",
     );
-  // Prefer the uncropped 4:3 sensor frame for iOS selfie capture.
-  // Do not change Android's established capture constraints.
+  // Ask for detail without imposing an aspect ratio on the camera sensor.
+  // A forced 9:16 track can be a severe digital crop of a native 4:3/16:9 camera.
   const longEdge = Math.round((Number(settings.quality) * 16) / 9);
-  const idealHeight = preferWideSelfie ? Math.round((longEdge * 3) / 4) : longEdge;
   const selection = settings.deviceId
     ? { deviceId: { exact: settings.deviceId } }
     : { facingMode: { ideal: settings.facing } };
@@ -107,7 +105,7 @@ export async function requestCamera(
         video: {
           ...selection,
           width: { ideal: longEdge },
-          height: { ideal: idealHeight },
+          height: { ideal: longEdge },
           resizeMode: { exact: "none" },
           frameRate,
         },
@@ -121,7 +119,7 @@ export async function requestCamera(
         video: {
           facingMode: { ideal: settings.facing },
           width: { ideal: 1280 },
-          height: { ideal: preferWideSelfie ? 960 : 1280 },
+          height: { ideal: 1280 },
           resizeMode: { ideal: "none" },
           frameRate,
         },
@@ -150,18 +148,6 @@ async function resetCameraZoom(stream) {
 }
 export const framingScale = (framing) => (framing === "close-up" ? 1.2 : 1);
 
-export function portraitFit(width, height, targetWidth, targetHeight) {
-  const scale = Math.min(targetWidth / width, targetHeight / height);
-  const drawWidth = width * scale;
-  const drawHeight = height * scale;
-  return {
-    x: (targetWidth - drawWidth) / 2,
-    y: (targetHeight - drawHeight) / 2,
-    width: drawWidth,
-    height: drawHeight,
-  };
-}
-
 function portraitCrop(width, height, zoom) {
   const cropWidth = Math.min(width, (height * 9) / 16) / zoom;
   const cropHeight = (cropWidth * 16) / 9;
@@ -174,19 +160,15 @@ function portraitCrop(width, height, zoom) {
 }
 
 // Record a compatible native frame directly. Otherwise encode one camera-only crop.
-export function portraitStream(video, source, quality, framing, fitSelfie = false) {
+export function portraitStream(video, source, quality, framing) {
   const sw = video.videoWidth,
     sh = video.videoHeight;
   if (!sw || !sh)
     throw new Error("Camera is warming up. Try recording again in a moment.");
   const zoom = framingScale(framing);
-  const crop = fitSelfie
-    ? { x: 0, y: 0, width: sw, height: sh }
-    : portraitCrop(sw, sh, zoom);
-  // Never upscale captured image detail when fitting the full sensor.
-  const available = fitSelfie
-    ? Math.min(Number(quality), sw, (sh * 9) / 16)
-    : Math.min(Number(quality), crop.width);
+  const crop = portraitCrop(sw, sh, zoom);
+  // Prefer Full HD, then HD, then the largest even 9:16 frame the crop supports.
+  const available = Math.min(Number(quality), crop.width);
   const width =
     available >= 1080
       ? 1080
@@ -248,17 +230,7 @@ export function portraitStream(video, source, quality, framing, fitSelfie = fals
       width: cropWidth,
       height: cropHeight,
     } = portraitCrop(sourceWidth, sourceHeight, zoom);
-    if (fitSelfie) {
-      const fitted = portraitFit(sourceWidth, sourceHeight, width, height);
-      context.fillStyle = "#141416";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(
-        video, 0, 0, sourceWidth, sourceHeight,
-        fitted.x, fitted.y, fitted.width, fitted.height,
-      );
-    } else {
-      context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
-    }
+    context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
     if (manualFrames) canvasTrack.requestFrame();
   }
   function next() {
@@ -275,7 +247,7 @@ export function portraitStream(video, source, quality, framing, fitSelfie = fals
     stream,
     width,
     height,
-    path: fitSelfie ? "wide selfie fit" : "center crop",
+    path: "center crop",
     crop,
     cleanup() {
       if (frameCallbacks) video.cancelVideoFrameCallback(frame);
