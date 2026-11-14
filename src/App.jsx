@@ -941,8 +941,10 @@ export default function App() {
                 />
               </label>
               <p className="fine-print">
-                Close-Up uses a tighter crop and can lower output resolution.
-                Voice Cleanup uses your browser’s microphone processing.
+                Standard keeps the full front camera view on iPhone, with padding
+                when needed to fit portrait video. Close-Up uses a tighter crop
+                and can lower output resolution. Voice Cleanup uses your browser’s
+                microphone processing.
               </p>
               {diagnosticsEnabled && (
                 <details className="recording-diagnostics">
