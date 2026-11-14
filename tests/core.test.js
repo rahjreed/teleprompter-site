@@ -8,6 +8,7 @@ import {
   formatTime,
   mediaError,
   requestCamera,
+  portraitFit,
   startRecorder,
 } from "../src/media.js";
 
@@ -105,6 +106,51 @@ test("camera requests retain the native field of view and microphone audio", asy
   assert.equal(constraints.audio.autoGainControl.ideal, true);
   assert.equal(constraints.video.facingMode.ideal, "environment");
 });
+test("iPhone front camera prefers uncropped 4:3 sensor dimensions", async () => {
+  let constraints;
+  await requestCamera(
+    { quality: "1080", facing: "user" },
+    { getUserMedia: async (next) => { constraints = next; return "stream"; } },
+    { preferWideSelfie: true },
+  );
+  assert.equal(constraints.video.width.ideal, 1920);
+  assert.equal(constraints.video.height.ideal, 1440);
+  assert.deepEqual(constraints.video.resizeMode, { exact: "none" });
+  assert.equal(constraints.video.facingMode.ideal, "user");
+  assert.equal(constraints.video.aspectRatio, undefined);
+});
+
+test("iPhone front camera fallback still prefers an uncropped 4:3 sensor", async () => {
+  let requests = [];
+  await requestCamera(
+    { quality: "1080", facing: "user" },
+    { getUserMedia: async (next) => {
+      requests.push(next);
+      if (requests.length === 1)
+        throw Object.assign(new Error("Unsupported"), { name: "OverconstrainedError" });
+      return "stream";
+    } },
+    { preferWideSelfie: true },
+  );
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].video.width.ideal, 1280);
+  assert.equal(requests[1].video.height.ideal, 960);
+});
+
+test("wide selfie portrait fit preserves full frame rather than cutting off sides", () => {
+  assert.deepEqual(portraitFit(1080, 1440, 720, 1280), {
+    x: 0, y: 160, width: 720, height: 960,
+  });
+  assert.deepEqual(portraitFit(1080, 1920, 720, 1280), {
+    x: 0, y: 0, width: 720, height: 1280,
+  });
+  const landscape = portraitFit(1920, 1080, 720, 1280);
+  assert.equal(landscape.x, 0);
+  assert.equal(landscape.y, 437.5);
+  assert.equal(landscape.width, 720);
+  assert.equal(landscape.height, 405);
+});
+
 test("camera zoom resets to 1x when supported and tolerates unsupported zoom", async () => {
   const applied = [];
   const track = {
