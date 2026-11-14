@@ -9,6 +9,7 @@ import {
   mediaError,
   requestCamera,
   portraitFit,
+  portraitStream,
   startRecorder,
 } from "../src/media.js";
 
@@ -149,6 +150,55 @@ test("wide selfie portrait fit preserves full frame rather than cutting off side
   assert.equal(landscape.y, 437.5);
   assert.equal(landscape.width, 720);
   assert.equal(landscape.height, 405);
+});
+
+test("wide selfie recording keeps the full source frame, microphone and portrait output", () => {
+  const oldDocument = globalThis.document;
+  const oldWindow = globalThis.window;
+  const drawings = [];
+  const tracksAdded = [];
+  let frameCallback;
+  const stream = {
+    getVideoTracks: () => [{ stop() {} }],
+    addTrack: (track) => tracksAdded.push(track),
+  };
+  const context = {
+    fillRect(...args) { drawings.push(["background", ...args]); },
+    drawImage(...args) { drawings.push(["video", ...args]); },
+  };
+  const canvas = {
+    captureStream: () => stream,
+    getContext: () => context,
+  };
+  const video = {
+    videoWidth: 1080,
+    videoHeight: 1440,
+    readyState: 4,
+    requestVideoFrameCallback: (callback) => { frameCallback = callback; return 1; },
+    cancelVideoFrameCallback: () => {},
+  };
+  const mic = { kind: "audio" };
+  const source = {
+    getVideoTracks: () => [{ getSettings: () => ({ width: 1080, height: 1440 }) }],
+    getAudioTracks: () => [mic],
+  };
+  globalThis.document = { createElement: () => canvas };
+  globalThis.window = {};
+  try {
+    const output = portraitStream(video, source, "1080", "standard", true);
+    assert.equal(output.width, 720);
+    assert.equal(output.height, 1280);
+    assert.equal(output.path, "wide selfie fit");
+    assert.deepEqual(output.crop, { x: 0, y: 0, width: 1080, height: 1440 });
+    assert.deepEqual(tracksAdded, [mic]);
+    frameCallback(0);
+    assert.deepEqual(drawings[0], ["background", 0, 0, 720, 1280]);
+    assert.deepEqual(drawings[1], ["video", video, 0, 0, 1080, 1440, 0, 160, 720, 960]);
+    output.cleanup();
+  } finally {
+    globalThis.document = oldDocument;
+    globalThis.window = oldWindow;
+  }
 });
 
 test("camera zoom resets to 1x when supported and tolerates unsupported zoom", async () => {
