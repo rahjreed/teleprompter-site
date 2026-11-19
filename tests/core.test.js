@@ -67,7 +67,9 @@ test("recorder prefers MP4, then retries a supported format if the encoder fails
   const output = { width: 1080, height: 1920, stream: {} };
   const recorder = startRecorder(output, TestRecorder);
   assert.deepEqual(attempts, ["video/mp4", "video/webm;codecs=vp8,opus"]);
-  assert.equal(recorder.options.videoBitsPerSecond, 12_000_000);
+  assert.equal(recorder.options.videoBitsPerSecond, 6_000_000);
+  const hd = startRecorder({ width: 720, height: 1280, stream: {} }, TestRecorder);
+  assert.equal(hd.options.videoBitsPerSecond, 2_666_667);
   assert.equal(recorder.options.audioBitsPerSecond, 160_000);
   assert.throws(() => startRecorder(output, null), /not supported/);
 });
