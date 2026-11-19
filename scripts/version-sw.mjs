@@ -21,8 +21,10 @@ for (const file of files) {
     .update(file === path ? worker : await readFile(file));
 }
 const hash = digest.digest("hex").slice(0, 12);
+const buildAssets = files.map(file => relative(dist, file)).filter(file => file.startsWith("assets/") && /\.(?:js|css)$/.test(file));
 await writeFile(
   path,
-  worker.replace("callista-shell-v1", `callista-shell-${hash}`),
+  worker.replace("callista-shell-v1", `callista-shell-${hash}`)
+    .replace("const buildAssets = [];", `const buildAssets = ${JSON.stringify(buildAssets)};`),
 );
 console.log(`Versioned offline shell: ${hash}`);
