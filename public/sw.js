@@ -1,4 +1,6 @@
 const CACHE = "callista-shell-v1";
+// Populated at build time, including the offline media worker.
+const buildAssets = [];
 const base = new URL("./", self.location).href;
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -20,7 +22,7 @@ self.addEventListener("install", (event) => {
       ].map((file) => new URL(`brand/prompterson/${file}`, base).href);
       await cache.addAll(
         [
-          ...assets,
+          ...new Set([...assets, ...buildAssets.map((file) => new URL(file, base).href)]),
           new URL("manifest.webmanifest", base).href,
           ...brandAssets,
         ].map((url) => new Request(url, { cache: "reload" })),
