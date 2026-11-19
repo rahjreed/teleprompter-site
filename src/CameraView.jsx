@@ -27,7 +27,7 @@ import {
   measureMicrophone,
 } from "./recordingDiagnostics";
 import { storageStatus } from "./storage";
-import { finalizeMp4 } from "./mp4Repair";
+import { finalizeMp4InBackground } from "./mp4Background";
 import { attribution, mascot, productName, tagline } from "./brand";
 
 // Keep the persisted 0–25 slider scale while allowing a wider physical range.
@@ -223,9 +223,9 @@ export default function CameraView({
         if (e.data.size) {
           chunks.push(e.data);
           bytes += e.data.size;
-          if (bytes > 400 * 1024 * 1024 && capture.state === "recording") {
+          if (bytes > 180 * 1024 * 1024 && capture.state === "recording") {
             callbacks.current.alert(
-              "Take stopped at the memory limit. Save this take and start another.",
+              "Take stopped at the mobile memory safety limit. Save this take and start another.",
             );
             stopRecording();
           }
@@ -252,6 +252,7 @@ export default function CameraView({
         const rawBlob = new Blob(chunks, {
           type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
+        chunks.length = 0;
         if (!rawBlob.size) {
           if (mounted.current) {
             transition("ready");
@@ -265,7 +266,7 @@ export default function CameraView({
           let duration = elapsed;
           let needsRepair = false;
           try {
-            const finalized = await finalizeMp4(rawBlob, elapsed);
+            const finalized = await finalizeMp4InBackground(rawBlob, elapsed);
             blob = finalized.blob;
             if (finalized.duration != null) duration = finalized.duration;
           } catch (repairError) {
@@ -339,19 +340,15 @@ export default function CameraView({
   async function prepareRecording() {
     if (stateRef.current !== "ready") return;
     transition("countdown");
-    let status;
-    try {
-      status = await storageStatus();
-    } catch {
-      callbacks.current.alert(
-        "Storage capacity could not be checked. Download your take immediately afterward.",
-      );
-    }
+    // Storage estimates are advisory: never block capture on a slow browser.
+    storageStatus().then((status) => {
+      if (status?.low && mounted.current &&
+          ["countdown", "recording"].includes(stateRef.current))
+        callbacks.current.alert(
+          "Storage is low. Keep this take short and download it immediately afterward.",
+        );
+    }).catch(() => {});
     if (stateRef.current !== "countdown" || !mounted.current) return;
-    if (status?.low)
-      callbacks.current.alert(
-        "Storage is low. Keep this take short and download it immediately afterward.",
-      );
     const seconds = Number(callbacks.current.settings.countdown);
     setCount(seconds);
     if (!seconds) return beginRecording();
