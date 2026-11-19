@@ -21,8 +21,8 @@ export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
   ];
   const options = {
     videoBitsPerSecond: Math.max(
-      3_000_000,
-      Math.round((12_000_000 * output.width * output.height) / (1080 * 1920)),
+      1_500_000,
+      Math.min(6_000_000, Math.round((6_000_000 * output.width * output.height) / (1080 * 1920))),
     ),
     audioBitsPerSecond: 160_000,
   };
@@ -78,6 +78,7 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
+  { userAgent = globalThis.navigator?.userAgent || "" } = {},
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -98,6 +99,28 @@ export async function requestCamera(
     sampleRate: { ideal: 48000 },
   };
   const frameRate = { ideal: 30, max: 30 };
+  // Android Standard: ask the browser/camera for a ready-to-record portrait
+  // track. Avoid a second canvas/GPU capture pipeline where possible.
+  // Do not apply this to iOS or Close-Up; keep their established framing.
+  if (/Android/i.test(userAgent) && settings.framing !== "close-up") {
+    const widths = Number(settings.quality) === 720 ? [720] : [1080, 720];
+    for (const width of widths) {
+      try {
+        return await devices.getUserMedia({
+          audio,
+          video: {
+            ...selection,
+            width: { exact: width },
+            height: { exact: width * 16 / 9 },
+            resizeMode: { ideal: "crop-and-scale" },
+            frameRate,
+          },
+        });
+      } catch (error) {
+        if (error.name !== "OverconstrainedError") throw error;
+      }
+    }
+  }
   try {
     return await resetCameraZoom(
       await devices.getUserMedia({
@@ -209,14 +232,11 @@ export function portraitStream(video, source, quality, framing) {
   const context = canvas.getContext("2d", { alpha: false });
   if (!context)
     throw new Error("Could not prepare the portrait recording frame.");
-  context.imageSmoothingQuality = "high";
+  context.imageSmoothingQuality = "medium";
   const frameCallbacks = typeof video.requestVideoFrameCallback === "function";
-  const manualFrames =
-    frameCallbacks &&
-    typeof window.CanvasCaptureMediaStreamTrack?.prototype.requestFrame ===
-      "function";
-  const stream = canvas.captureStream(manualFrames ? 0 : 30);
-  const canvasTrack = stream.getVideoTracks()[0];
+  // A timed canvas stream avoids depending on manual requestFrame delivery,
+  // which can stall on some mobile browser/GPU combinations.
+  const stream = canvas.captureStream(30);
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
   let frame;
   let previousTime = -1;
@@ -231,7 +251,6 @@ export function portraitStream(video, source, quality, framing) {
       height: cropHeight,
     } = portraitCrop(sourceWidth, sourceHeight, zoom);
     context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
-    if (manualFrames) canvasTrack.requestFrame();
   }
   function next() {
     if (frameCallbacks || video.currentTime !== previousTime) {
@@ -253,6 +272,8 @@ export function portraitStream(video, source, quality, framing) {
       if (frameCallbacks) video.cancelVideoFrameCallback(frame);
       else cancelAnimationFrame(frame);
       stream.getVideoTracks().forEach((track) => track.stop());
+      // Release the backing surface once all capture tracks have stopped.
+      canvas.width = canvas.height = 1;
     },
   };
 }
