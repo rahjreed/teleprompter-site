@@ -34,7 +34,7 @@ import {
 } from "./storage";
 import { busy, fileName, formatTime, videoMimeType } from "./media";
 import { isAppleMobile, saveRecordingToDevice } from "./videoSave";
-import { finalizeMp4 } from "./mp4Repair";
+import { finalizeMp4InBackground } from "./mp4Background";
 import { inspectRecording } from "./media";
 import CameraView from "./CameraView";
 import { useInstallOffer } from "./useInstallOffer";
@@ -312,7 +312,7 @@ export default function App() {
   async function repairVideo(video) {
     setNotice("Checking the original video for recoverable footage…");
     try {
-      const { blob, duration } = await finalizeMp4(video.blob);
+      const { blob, duration } = await finalizeMp4InBackground(video.blob);
       if (blob === video.blob || duration <= video.duration + 2) {
         setNotice("No additional footage was detected. The original recording has not been changed.");
         return;
