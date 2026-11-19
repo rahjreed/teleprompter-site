@@ -78,6 +78,7 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
+  { userAgent = globalThis.navigator?.userAgent || "" } = {},
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -101,24 +102,23 @@ export async function requestCamera(
   // Android Standard: ask the browser/camera for a ready-to-record portrait
   // track. Avoid a second canvas/GPU capture pipeline where possible.
   // Do not apply this to iOS or Close-Up; keep their established framing.
-  if (/Android/i.test(globalThis.navigator?.userAgent || "") &&
-      settings.framing !== "close-up") {
-    const width = Number(settings.quality) === 720 ? 720 : 1080;
-    try {
-      const stream = await devices.getUserMedia({
-        audio,
-        video: {
-          ...selection,
-          width: { exact: width },
-          height: { exact: width * 16 / 9 },
-          resizeMode: { ideal: "crop-and-scale" },
-          frameRate,
-        },
-      });
-      // Avoid reapplying constraints (and restarting the camera) on this path.
-      return stream;
-    } catch (error) {
-      if (error.name !== "OverconstrainedError") throw error;
+  if (/Android/i.test(userAgent) && settings.framing !== "close-up") {
+    const widths = Number(settings.quality) === 720 ? [720] : [1080, 720];
+    for (const width of widths) {
+      try {
+        return await devices.getUserMedia({
+          audio,
+          video: {
+            ...selection,
+            width: { exact: width },
+            height: { exact: width * 16 / 9 },
+            resizeMode: { ideal: "crop-and-scale" },
+            frameRate,
+          },
+        });
+      } catch (error) {
+        if (error.name !== "OverconstrainedError") throw error;
+      }
     }
   }
   try {
