@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { finalizeMp4InBackground } from "../src/mp4Background.js";
-import { portraitStream } from "../src/media.js";
+import { portraitStream, requestCamera } from "../src/media.js";
 
 function mockWorker(reply) {
   return {
@@ -78,5 +78,70 @@ test("cropped camera uses a timed 30fps canvas, keeps audio and releases capture
     assert.equal(canvas.height, 1);
   } finally {
     globalThis.document = previousDocument;
+  }
+});
+
+test("Android Standard requests direct portrait capture with audio and avoids canvas for matching frames", async () => {
+  const mic = { kind: "audio" };
+  const source = {
+    getVideoTracks: () => [{ getSettings: () => ({ width: 1080, height: 1920 }) }],
+    getAudioTracks: () => [mic],
+  };
+  const requests = [];
+  const devices = { getUserMedia: async c => { requests.push(c); return source; } };
+  const result = await requestCamera(
+    { quality: "1080", facing: "user", framing: "standard" },
+    devices, { userAgent: "Mozilla/5.0 (Linux; Android 17)" },
+  );
+  assert.equal(result, source);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].video.width, { exact: 1080 });
+  assert.deepEqual(requests[0].video.height, { exact: 1920 });
+  assert.ok(requests[0].audio);
+  const take = portraitStream({ videoWidth: 1080, videoHeight: 1920 }, source, "1080", "standard");
+  assert.equal(take.path, "native");
+  assert.equal(take.stream, source);
+  assert.deepEqual(take.stream.getAudioTracks(), [mic]);
+});
+
+test("Android attempts native HD if native Full HD is unavailable", async () => {
+  const requests = [];
+  const stream = {};
+  const devices = { getUserMedia: async c => {
+    requests.push(c);
+    if (requests.length === 1) throw Object.assign(new Error("camera mode unavailable"), { name: "OverconstrainedError" });
+    return stream;
+  } };
+  assert.equal(await requestCamera({ quality: "1080", framing: "standard" }, devices, { userAgent: "Android" }), stream);
+  assert.deepEqual(requests.map(c => c.video.width.exact), [1080, 720]);
+  assert.deepEqual(requests.map(c => c.video.height.exact), [1920, 1280]);
+});
+
+test("Android falls back to original camera constraints if both portrait modes are unavailable", async () => {
+  const requests = [];
+  const stream = {};
+  const devices = { getUserMedia: async c => {
+    requests.push(c);
+    if (requests.length < 3) throw Object.assign(new Error("camera mode unavailable"), { name: "OverconstrainedError" });
+    return stream;
+  } };
+  assert.equal(await requestCamera({ quality: "1080", framing: "standard" }, devices, { userAgent: "Android" }), stream);
+  assert.equal(requests.length, 3);
+  assert.deepEqual(requests[2].video.resizeMode, { exact: "none" });
+});
+
+test("Android denial is not retried; iPhone and Close-Up keep original capture constraints", async () => {
+  let attempts = 0;
+  await assert.rejects(requestCamera({ quality: "1080" }, { getUserMedia: async () => {
+    attempts++;
+    throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+  } }, { userAgent: "Android" }), /denied/);
+  assert.equal(attempts, 1);
+  for (const [userAgent, framing] of [["iPhone", "standard"], ["Android", "close-up"]]) {
+    await requestCamera({ quality: "1080", framing }, { getUserMedia: async c => {
+      assert.deepEqual(c.video.width, { ideal: 1920 });
+      assert.deepEqual(c.video.resizeMode, { exact: "none" });
+      return {};
+    } }, { userAgent });
   }
 });
