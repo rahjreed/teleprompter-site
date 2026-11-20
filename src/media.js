@@ -6,7 +6,7 @@ export const formatTime = (seconds) =>
     .padStart(2, "0")}`;
 export const busy = (state) =>
   ["countdown", "recording", "saving"].includes(state);
-export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
+export function startRecorder(output, Recorder = globalThis.MediaRecorder, report = () => {}) {
   if (!Recorder)
     throw new Error(
       "Video recording is not supported. Try current Chrome or Safari.",
@@ -32,14 +32,19 @@ export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
     "",
   ]) {
     try {
+      report("encoder-attempt", { mimeType: mimeType || "browser-default", width: output.width, height: output.height, ...options });
       const recorder = new Recorder(output.stream, {
         ...options,
         ...(mimeType ? { mimeType } : {}),
       });
       // Recorder events are queued, so callers can attach handlers synchronously.
+      report("encoder-created", { mimeType: recorder.mimeType, state: recorder.state });
+      report("phase", { name: "encoder-start", time: Date.now() });
       recorder.start(1000);
+      report("encoder-started", { mimeType: recorder.mimeType, state: recorder.state });
       return recorder;
     } catch (error) {
+      report("error", { stage: "encoder-attempt", message: error.message, name: error.name });
       lastError = error;
     }
   }
@@ -78,6 +83,7 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
+  report = () => {},
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -110,6 +116,7 @@ export async function requestCamera(
           frameRate,
         },
       }),
+      report,
     );
   } catch (error) {
     if (error.name !== "OverconstrainedError") throw error;
@@ -124,15 +131,19 @@ export async function requestCamera(
           frameRate,
         },
       }),
+      report,
     );
   }
 }
-async function resetCameraZoom(stream) {
+async function resetCameraZoom(stream, report = () => {}) {
   const track = stream.getVideoTracks?.()[0];
+  const { width, height, frameRate, facingMode } = track?.getSettings?.() || {};
+  await report("camera-acquired", { width, height, frameRate, facingMode, state: track?.readyState });
   try {
     const zoom = track?.getCapabilities?.().zoom;
     if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max)) {
       const constraints = track.getConstraints?.() || {};
+      await report("phase", { name: "camera-zoom-reset", time: Date.now() });
       await track.applyConstraints({
         ...constraints,
         advanced: [
@@ -144,6 +155,7 @@ async function resetCameraZoom(stream) {
   } catch {
     // Zoom controls are optional. Keep the usable native stream if unsupported or denied.
   }
+  report("phase", { name: "camera-constraints-complete", time: Date.now() });
   return stream;
 }
 export const framingScale = (framing) => (framing === "close-up" ? 1.2 : 1);

@@ -87,11 +87,14 @@ export default function CameraView({
     });
   }
   function transition(next) {
+    callbacks.current.onDiagnostics?.("state", { name: next });
     stateRef.current = next;
     if (mounted.current) setState(next);
     callbacks.current.onState(next);
   }
   function stopTracks() {
+    stopMonitor.current?.();
+    stopMonitor.current = null;
     source.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();
@@ -123,13 +126,15 @@ export default function CameraView({
     transition("requesting");
     try {
       const prefs = { ...callbacks.current.settings, ...patch };
-      callbacks.current.onDiagnostics?.("phase", { name: "camera-request", time: Date.now() });
-      const stream = await requestCamera(prefs);
+      await callbacks.current.onDiagnostics?.("phase", { name: "camera-request", time: Date.now(), quality: prefs.quality, facing: prefs.facing, microphone: prefs.microphone });
+      const stream = await requestCamera(prefs, undefined,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details));
       if (!mounted.current || token !== generation.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
       source.current = stream;
+      callbacks.current.onDiagnostics?.("camera-granted", captureDetails(stream, video.current));
       const trackSettings = stream.getVideoTracks()[0].getSettings();
       setFront(
         trackSettings.facingMode
@@ -137,6 +142,12 @@ export default function CameraView({
           : prefs.facing === "user",
       );
       video.current.srcObject = stream;
+      if (callbacks.current.onDiagnostics) {
+        stopMonitor.current = monitorCapture(video.current, stream,
+          () => output.current, () => recorder.current,
+          (section, details) => callbacks.current.onDiagnostics?.(section, details));
+      }
+      callbacks.current.onDiagnostics?.("phase", { name: "preview-play", time: Date.now() });
       await video.current.play();
       if (!mounted.current || token !== generation.current) return;
       if (onDiagnostics)
@@ -195,7 +206,7 @@ export default function CameraView({
           "Camera or microphone stopped. Enable them again before recording.",
         );
       const preferences = callbacks.current.settings;
-      callbacks.current.onDiagnostics?.("phase", { name: "prepare-encoder", time: Date.now() });
+      await callbacks.current.onDiagnostics?.("phase", { name: "prepare-encoder", time: Date.now() });
       const take = portraitStream(
         video.current,
         source.current,
@@ -215,19 +226,23 @@ export default function CameraView({
         onDiagnostics("export", null);
         stopMeter.current = measureMicrophone(source.current);
       }
-      started.current = performance.now();
-      const capture = startRecorder(take);
-      recorder.current = capture;
-      if (onDiagnostics) {
-        stopMonitor.current = monitorCapture(video.current, source.current, take, capture,
-          value => callbacks.current.onDiagnostics?.("health", value));
+      if (onDiagnostics && !stopMonitor.current) {
+        stopMonitor.current = monitorCapture(video.current, source.current,
+          () => output.current, () => recorder.current,
+          (section, details) => callbacks.current.onDiagnostics?.(section, details));
       }
+      await callbacks.current.onDiagnostics?.("phase", { name: "encoder-construction", width: take.width, height: take.height, time: Date.now() });
+      started.current = performance.now();
+      const capture = startRecorder(take, undefined,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details));
+      recorder.current = capture;
       capture.onstart = () =>
         callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
       let bytes = 0;
       const recordingScript = callbacks.current.script;
       capture.ondataavailable = (e) => {
+        callbacks.current.onDiagnostics?.("encoder-chunk", { bytes: e.data.size, totalBytes: bytes + e.data.size, timecode: e.timecode });
         if (e.data.size) {
           chunks.push(e.data);
           bytes += e.data.size;
@@ -259,7 +274,7 @@ export default function CameraView({
         output.current?.cleanup();
         output.current = null;
         recorder.current = null;
-        callbacks.current.onDiagnostics?.("phase", { name: "finalizing", time: Date.now() });
+        await callbacks.current.onDiagnostics?.("phase", { name: "finalizing", time: Date.now() });
         const rawBlob = new Blob(chunks, {
           type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
@@ -384,7 +399,9 @@ export default function CameraView({
     } catch {
       // Permission checks still work when browser storage is unavailable.
     }
+    callbacks.current.onDiagnostics?.("phase", { name: "permission-check", time: Date.now() });
     cameraPermission().then((permission) => {
+      callbacks.current.onDiagnostics?.("permission", { state: permission });
       if (cancelled) return;
       setIntroComplete(remembered || permission === "granted");
       setCheckingAccess(false);
