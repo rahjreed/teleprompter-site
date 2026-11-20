@@ -210,14 +210,10 @@ export function portraitStream(video, source, quality, framing) {
   if (!context)
     throw new Error("Could not prepare the portrait recording frame.");
   context.imageSmoothingQuality = "high";
-  const frameCallbacks = typeof video.requestVideoFrameCallback === "function";
-  const manualFrames =
-    frameCallbacks &&
-    typeof window.CanvasCaptureMediaStreamTrack?.prototype.requestFrame ===
-      "function";
-  const stream = canvas.captureStream(manualFrames ? 0 : 30);
-  const canvasTrack = stream.getVideoTracks()[0];
+  // Timed capture keeps frame delivery independent of optional requestFrame support.
+  const stream = canvas.captureStream(30);
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
+  let framesDrawn = 0;
   let frame;
   let previousTime = -1;
   function draw() {
@@ -231,28 +227,33 @@ export function portraitStream(video, source, quality, framing) {
       height: cropHeight,
     } = portraitCrop(sourceWidth, sourceHeight, zoom);
     context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
-    if (manualFrames) canvasTrack.requestFrame();
+    framesDrawn++;
+
   }
-  function next() {
-    if (frameCallbacks || video.currentTime !== previousTime) {
+  let lastDraw = -Infinity;
+  let stopped = false;
+  function next(now = performance.now()) {
+    if (stopped) return;
+    if (now - lastDraw >= 1000 / 30 && video.currentTime !== previousTime) {
       previousTime = video.currentTime;
+      lastDraw = now;
       draw();
     }
-    frame = frameCallbacks
-      ? video.requestVideoFrameCallback(next)
-      : requestAnimationFrame(next);
+    frame = requestAnimationFrame(next);
   }
   next();
   return {
     stream,
     width,
     height,
+    get framesDrawn() { return framesDrawn; },
     path: "center crop",
     crop,
     cleanup() {
-      if (frameCallbacks) video.cancelVideoFrameCallback(frame);
-      else cancelAnimationFrame(frame);
+      stopped = true;
+      cancelAnimationFrame(frame);
       stream.getVideoTracks().forEach((track) => track.stop());
+      canvas.width = canvas.height = 1;
     },
   };
 }

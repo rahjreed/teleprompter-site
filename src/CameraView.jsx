@@ -1,3 +1,4 @@
+import { monitorCapture } from "./captureMonitor";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -49,6 +50,7 @@ export default function CameraView({
     recorder = useRef(null),
     output = useRef(null),
     stopMeter = useRef(null),
+    stopMonitor = useRef(null),
     timer = useRef(null),
     mounted = useRef(true),
     generation = useRef(0),
@@ -121,6 +123,7 @@ export default function CameraView({
     transition("requesting");
     try {
       const prefs = { ...callbacks.current.settings, ...patch };
+      callbacks.current.onDiagnostics?.("phase", { name: "camera-request", time: Date.now() });
       const stream = await requestCamera(prefs);
       if (!mounted.current || token !== generation.current) {
         stream.getTracks().forEach((t) => t.stop());
@@ -192,6 +195,7 @@ export default function CameraView({
           "Camera or microphone stopped. Enable them again before recording.",
         );
       const preferences = callbacks.current.settings;
+      callbacks.current.onDiagnostics?.("phase", { name: "prepare-encoder", time: Date.now() });
       const take = portraitStream(
         video.current,
         source.current,
@@ -214,6 +218,10 @@ export default function CameraView({
       started.current = performance.now();
       const capture = startRecorder(take);
       recorder.current = capture;
+      if (onDiagnostics) {
+        stopMonitor.current = monitorCapture(video.current, source.current, take, capture,
+          value => callbacks.current.onDiagnostics?.("health", value));
+      }
       capture.onstart = () =>
         callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
@@ -244,14 +252,18 @@ export default function CameraView({
           transition("saving");
         }
         const elapsed = (performance.now() - started.current) / 1000;
+        stopMonitor.current?.();
+        stopMonitor.current = null;
         const microphoneLevels = stopMeter.current?.();
         stopMeter.current = null;
         output.current?.cleanup();
         output.current = null;
         recorder.current = null;
+        callbacks.current.onDiagnostics?.("phase", { name: "finalizing", time: Date.now() });
         const rawBlob = new Blob(chunks, {
           type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
+        chunks.length = 0;
         if (!rawBlob.size) {
           if (mounted.current) {
             transition("ready");
@@ -325,8 +337,11 @@ export default function CameraView({
       setElapsed(0);
       setPlaying(true);
       setControls(false);
+      callbacks.current.onDiagnostics?.("phase", { name: "recording", time: Date.now() });
       transition("recording");
     } catch (e) {
+      stopMonitor.current?.();
+      stopMonitor.current = null;
       stopMeter.current?.();
       stopMeter.current = null;
       output.current?.cleanup();
@@ -339,19 +354,13 @@ export default function CameraView({
   async function prepareRecording() {
     if (stateRef.current !== "ready") return;
     transition("countdown");
-    let status;
-    try {
-      status = await storageStatus();
-    } catch {
-      callbacks.current.alert(
-        "Storage capacity could not be checked. Download your take immediately afterward.",
-      );
-    }
+    // Storage estimates are advisory and some mobile browsers never settle them.
+    storageStatus().then((status) => {
+      if (status.low && mounted.current && busy(stateRef.current)) {
+        callbacks.current.alert("Storage is low. Keep this take short and download it immediately afterward.");
+      }
+    }).catch(() => {});
     if (stateRef.current !== "countdown" || !mounted.current) return;
-    if (status?.low)
-      callbacks.current.alert(
-        "Storage is low. Keep this take short and download it immediately afterward.",
-      );
     const seconds = Number(callbacks.current.settings.countdown);
     setCount(seconds);
     if (!seconds) return beginRecording();
@@ -416,6 +425,8 @@ export default function CameraView({
       generation.current++;
       clearInterval(timer.current);
       if (recorder.current?.state === "recording") recorder.current.stop();
+      stopMonitor.current?.();
+      stopMonitor.current = null;
       stopMeter.current?.();
       stopMeter.current = null;
       output.current?.cleanup();

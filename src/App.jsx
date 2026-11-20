@@ -163,9 +163,18 @@ export default function App() {
   const installOffer = useInstallOffer();
   const updateWaiting = usePwaUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [diagnostics, setDiagnostics] = useState({});
+  const [diagnostics, setDiagnostics] = useState(() => {
+    if (!diagnosticsEnabled) return {};
+    try { return JSON.parse(sessionStorage.getItem("prompterson-capture-audit") || "{}"); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    if (!diagnosticsEnabled) return;
+    try { sessionStorage.setItem("prompterson-capture-audit", JSON.stringify(diagnostics)); }
+    catch { /* Diagnostic storage is optional. */ }
+  }, [diagnostics]);
   function recordDiagnostics(section, details) {
-    console.info(`[${productName} recording]`, section, details);
+    if (section !== "health") console.info(`[${productName} recording]`, section, details);
     setDiagnostics((previous) =>
       section === "error"
         ? {
@@ -947,6 +956,15 @@ export default function App() {
               {diagnosticsEnabled && (
                 <details className="recording-diagnostics">
                   <summary>Recording diagnostics</summary>
+                  <button className="secondary-button" onClick={() => {
+                    const data = { browser: navigator.userAgent, build: __PROMPTER_RELEASE__, ...diagnostics };
+                    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "prompterson-capture-diagnostics.json";
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                  }}>Download diagnostics</button>
                   <pre>
                     {JSON.stringify(
                       {
