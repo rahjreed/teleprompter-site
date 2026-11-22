@@ -1,4 +1,4 @@
-import { createDiagnosticJournal, diagnosticsRequested } from "./diagnosticJournal";
+import { createDiagnosticJournal, diagnosticsRequested, createDiagnosticsExport } from "./diagnosticJournal";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignLeft,
@@ -992,7 +992,7 @@ export default function App() {
                   <summary>Recording diagnostics</summary>
                   <button className="secondary-button" onClick={async () => {
                     await diagnosticJournal.flush();
-                    const data = { browser: navigator.userAgent, build: __PROMPTER_RELEASE__, ...diagnosticJournal.snapshot() };
+                    const data = createDiagnosticsExport(diagnosticJournal.snapshot(), __PROMPTER_RELEASE__, navigator.userAgent);
                     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
                     const link = document.createElement("a");
                     link.href = url;
