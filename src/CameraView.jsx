@@ -1,4 +1,5 @@
 import { monitorCapture } from "./captureMonitor";
+import { tracePreviewLifecycle } from "./previewLifecycle";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -52,6 +53,7 @@ export default function CameraView({
     output = useRef(null),
     stopMeter = useRef(null),
     stopMonitor = useRef(null),
+    previewTrace = useRef(null),
     timer = useRef(null),
     mounted = useRef(true),
     generation = useRef(0),
@@ -81,6 +83,21 @@ export default function CameraView({
     settings,
     script,
   };
+  // This ref is stable across React state/timer renders: a new element ID means
+  // React actually replaced the visible preview, not just re-rendered controls.
+  const attachPreview = React.useCallback((node) => {
+    if (video.current === node) return;
+    previewTrace.current?.stop();
+    previewTrace.current = null;
+    video.current = node;
+    if (node && callbacks.current.onDiagnostics) {
+      previewTrace.current = tracePreviewLifecycle(
+        node,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details),
+        () => stateRef.current,
+      );
+    }
+  }, []);
   function reportError(stage, error) {
     callbacks.current.onDiagnostics?.("error", {
       stage,
@@ -102,6 +119,7 @@ export default function CameraView({
     });
     source.current = null;
     if (video.current) video.current.srcObject = null;
+    previewTrace.current?.poll();
   }
   function cancelCountdown() {
     clearInterval(timer.current);
@@ -143,6 +161,7 @@ export default function CameraView({
           : prefs.facing === "user",
       );
       video.current.srcObject = stream;
+      previewTrace.current?.poll();
       if (callbacks.current.onDiagnostics) {
         stopMonitor.current = monitorCapture(video.current, stream,
           () => output.current, () => recorder.current,
@@ -209,6 +228,7 @@ export default function CameraView({
         );
       const preferences = callbacks.current.settings;
       await callbacks.current.onDiagnostics?.("phase", { name: "prepare-encoder", time: Date.now() });
+      callbacks.current.onDiagnostics?.("preview-before-canvas", previewTrace.current?.snapshot() ?? null);
       const take = portraitStream(
         video.current,
         source.current,
@@ -227,7 +247,9 @@ export default function CameraView({
           encoderFrame: { width: take.width, height: take.height },
         });
         onDiagnostics("export", null);
+        onDiagnostics("phase", { name: "microphone-analysis-start", time: Date.now() });
         stopMeter.current = measureMicrophone(source.current);
+        onDiagnostics("phase", { name: "microphone-analysis-ready", time: Date.now() });
       }
       if (onDiagnostics && !stopMonitor.current) {
         stopMonitor.current = monitorCapture(video.current, source.current,
@@ -471,6 +493,13 @@ export default function CameraView({
     };
   }, []);
   useEffect(() => {
+    callbacks.current.onDiagnostics?.("preview-ui-commit", {
+      phase: state, scriptScrolling: playing,
+      countdown: state === "countdown" ? count : null,
+      preview: previewTrace.current?.snapshot() ?? null,
+    });
+  }, [state, playing, count]);
+  useEffect(() => {
     if (state === "ready" && navigator.wakeLock && !wake.current)
       navigator.wakeLock
         .request("screen")
@@ -585,7 +614,7 @@ export default function CameraView({
     <main className="camera-stage">
       <div className="camera-frame">
         <video
-          ref={video}
+          ref={attachPreview}
           className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
           style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {
