@@ -94,7 +94,8 @@ export function tracePreviewLifecycle(video, report, getPhase = () => "unknown")
       lastConnected = video.isConnected;
     }
     if (video.paused !== lastPaused) {
-      if (video.paused) emit("preview-paused", { trigger: "sample", lastCall });
+      if (video.paused) emit("preview-paused", { trigger: "sample", lastCall,
+        explicitPauseRecently: lastCall?.action === "pause" && Date.now() - lastCall.at < 1500 });
       else emit("preview-resumed", { trigger: "sample", lastCall });
       lastPaused = video.paused;
     }
