@@ -156,3 +156,9 @@ export function createDiagnosticJournal({
   }
   return { record, snapshot, flush };
 }
+
+// The exporting runtime is authoritative. Recovered older journal fields must not
+// impersonate the build that generated the new file.
+export function createDiagnosticsExport(evidence, currentBuild, browser) {
+  return { ...evidence, browser, build: currentBuild, exportedBy: currentBuild };
+}
