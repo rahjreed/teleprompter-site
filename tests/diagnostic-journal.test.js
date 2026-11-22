@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createDiagnosticJournal, diagnosticsRequested } from "../src/diagnosticJournal.js";
+import { createDiagnosticJournal, diagnosticsRequested, createDiagnosticsExport } from "../src/diagnosticJournal.js";
 import { startRecorder } from "../src/media.js";
 
 function storage() {
@@ -56,4 +56,15 @@ test("an idle journal cannot overwrite another tab's capture evidence", async ()
   const recovered = createDiagnosticJournal({ storage: disk, legacyStorage: null }).snapshot();
   assert.equal(recovered.capture?.cameraTrack.width, 1920);
   assert.equal(recovered["encoder-started"]?.state, "recording");
+});
+
+test("a recovered journal cannot mislabel the currently exporting build", () => {
+  const historical = { build: { commit: "old-sha", version: "1.3" },
+    events: [{ section: "page-load", details: { build: { commit: "old-sha" } } }] };
+  const build = { commit: "new-sha", version: "1.3", channel: "preview" };
+  const exported = createDiagnosticsExport(historical, build, "Android test browser");
+  assert.deepEqual(exported.build, build);
+  assert.deepEqual(exported.exportedBy, build);
+  assert.equal(exported.events[0].details.build.commit, "old-sha");
+  assert.equal(exported.browser, "Android test browser");
 });
