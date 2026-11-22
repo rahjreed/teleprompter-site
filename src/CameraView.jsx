@@ -1,3 +1,5 @@
+import { monitorCapture } from "./captureMonitor";
+import { tracePreviewLifecycle } from "./previewLifecycle";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -47,8 +49,11 @@ export default function CameraView({
   const video = useRef(null),
     source = useRef(null),
     recorder = useRef(null),
+    encoderProgress = useRef(null),
     output = useRef(null),
     stopMeter = useRef(null),
+    stopMonitor = useRef(null),
+    previewTrace = useRef(null),
     timer = useRef(null),
     mounted = useRef(true),
     generation = useRef(0),
@@ -78,6 +83,21 @@ export default function CameraView({
     settings,
     script,
   };
+  // This ref is stable across React state/timer renders: a new element ID means
+  // React actually replaced the visible preview, not just re-rendered controls.
+  const attachPreview = React.useCallback((node) => {
+    if (video.current === node) return;
+    previewTrace.current?.stop();
+    previewTrace.current = null;
+    video.current = node;
+    if (node && callbacks.current.onDiagnostics) {
+      previewTrace.current = tracePreviewLifecycle(
+        node,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details),
+        () => stateRef.current,
+      );
+    }
+  }, []);
   function reportError(stage, error) {
     callbacks.current.onDiagnostics?.("error", {
       stage,
@@ -85,17 +105,21 @@ export default function CameraView({
     });
   }
   function transition(next) {
+    callbacks.current.onDiagnostics?.("state", { name: next });
     stateRef.current = next;
     if (mounted.current) setState(next);
     callbacks.current.onState(next);
   }
   function stopTracks() {
+    stopMonitor.current?.();
+    stopMonitor.current = null;
     source.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();
     });
     source.current = null;
     if (video.current) video.current.srcObject = null;
+    previewTrace.current?.poll();
   }
   function cancelCountdown() {
     clearInterval(timer.current);
@@ -121,12 +145,15 @@ export default function CameraView({
     transition("requesting");
     try {
       const prefs = { ...callbacks.current.settings, ...patch };
-      const stream = await requestCamera(prefs);
+      await callbacks.current.onDiagnostics?.("phase", { name: "camera-request", time: Date.now(), quality: prefs.quality, facing: prefs.facing, microphone: prefs.microphone });
+      const stream = await requestCamera(prefs, undefined,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details));
       if (!mounted.current || token !== generation.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
       source.current = stream;
+      callbacks.current.onDiagnostics?.("camera-granted", captureDetails(stream, video.current));
       const trackSettings = stream.getVideoTracks()[0].getSettings();
       setFront(
         trackSettings.facingMode
@@ -134,6 +161,14 @@ export default function CameraView({
           : prefs.facing === "user",
       );
       video.current.srcObject = stream;
+      previewTrace.current?.poll();
+      if (callbacks.current.onDiagnostics) {
+        stopMonitor.current = monitorCapture(video.current, stream,
+          () => output.current, () => recorder.current,
+          (section, details) => callbacks.current.onDiagnostics?.(section, details),
+          () => encoderProgress.current);
+      }
+      callbacks.current.onDiagnostics?.("phase", { name: "preview-play", time: Date.now() });
       await video.current.play();
       if (!mounted.current || token !== generation.current) return;
       if (onDiagnostics)
@@ -192,11 +227,14 @@ export default function CameraView({
           "Camera or microphone stopped. Enable them again before recording.",
         );
       const preferences = callbacks.current.settings;
+      await callbacks.current.onDiagnostics?.("phase", { name: "prepare-encoder", time: Date.now() });
+      callbacks.current.onDiagnostics?.("preview-before-canvas", previewTrace.current?.snapshot() ?? null);
       const take = portraitStream(
         video.current,
         source.current,
         preferences.quality,
         preferences.framing,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details),
       );
       output.current = take;
       if (onDiagnostics) {
@@ -209,17 +247,40 @@ export default function CameraView({
           encoderFrame: { width: take.width, height: take.height },
         });
         onDiagnostics("export", null);
+        onDiagnostics("phase", { name: "microphone-analysis-start", time: Date.now() });
         stopMeter.current = measureMicrophone(source.current);
+        onDiagnostics("phase", { name: "microphone-analysis-ready", time: Date.now() });
       }
+      if (onDiagnostics && !stopMonitor.current) {
+        stopMonitor.current = monitorCapture(video.current, source.current,
+          () => output.current, () => recorder.current,
+          (section, details) => callbacks.current.onDiagnostics?.(section, details),
+          () => encoderProgress.current);
+      }
+      await callbacks.current.onDiagnostics?.("phase", { name: "encoder-construction", width: take.width, height: take.height, time: Date.now() });
       started.current = performance.now();
-      const capture = startRecorder(take);
+      const capture = startRecorder(take, undefined,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details));
       recorder.current = capture;
+      encoderProgress.current = { startedAt: Date.now(), chunks: 0, bytes: 0, lastOutputAt: null, lastTimecode: null };
+      for (const event of ["pause", "resume", "stop"]) {
+        capture.addEventListener(event, () => callbacks.current.onDiagnostics?.("encoder-lifecycle", { event, state: capture.state, time: Date.now() }));
+      }
       capture.onstart = () =>
         callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
       let bytes = 0;
       const recordingScript = callbacks.current.script;
       capture.ondataavailable = (e) => {
+        if (e.data.size) {
+          encoderProgress.current = {
+            startedAt: encoderProgress.current.startedAt,
+            chunks: encoderProgress.current.chunks + 1,
+            bytes: encoderProgress.current.bytes + e.data.size,
+            lastOutputAt: Date.now(), lastTimecode: e.timecode,
+          };
+        }
+        callbacks.current.onDiagnostics?.("encoder-chunk", { bytes: e.data.size, totalBytes: bytes + e.data.size, timecode: e.timecode });
         if (e.data.size) {
           chunks.push(e.data);
           bytes += e.data.size;
@@ -244,14 +305,18 @@ export default function CameraView({
           transition("saving");
         }
         const elapsed = (performance.now() - started.current) / 1000;
+        stopMonitor.current?.();
+        stopMonitor.current = null;
         const microphoneLevels = stopMeter.current?.();
         stopMeter.current = null;
         output.current?.cleanup();
         output.current = null;
         recorder.current = null;
+        await callbacks.current.onDiagnostics?.("phase", { name: "finalizing", time: Date.now() });
         const rawBlob = new Blob(chunks, {
           type: chunks[0]?.type || capture.mimeType || "video/webm",
         });
+        chunks.length = 0;
         if (!rawBlob.size) {
           if (mounted.current) {
             transition("ready");
@@ -325,8 +390,11 @@ export default function CameraView({
       setElapsed(0);
       setPlaying(true);
       setControls(false);
+      callbacks.current.onDiagnostics?.("phase", { name: "recording", time: Date.now() });
       transition("recording");
     } catch (e) {
+      stopMonitor.current?.();
+      stopMonitor.current = null;
       stopMeter.current?.();
       stopMeter.current = null;
       output.current?.cleanup();
@@ -339,19 +407,13 @@ export default function CameraView({
   async function prepareRecording() {
     if (stateRef.current !== "ready") return;
     transition("countdown");
-    let status;
-    try {
-      status = await storageStatus();
-    } catch {
-      callbacks.current.alert(
-        "Storage capacity could not be checked. Download your take immediately afterward.",
-      );
-    }
+    // Storage estimates are advisory and some mobile browsers never settle them.
+    storageStatus().then((status) => {
+      if (status.low && mounted.current && busy(stateRef.current)) {
+        callbacks.current.alert("Storage is low. Keep this take short and download it immediately afterward.");
+      }
+    }).catch(() => {});
     if (stateRef.current !== "countdown" || !mounted.current) return;
-    if (status?.low)
-      callbacks.current.alert(
-        "Storage is low. Keep this take short and download it immediately afterward.",
-      );
     const seconds = Number(callbacks.current.settings.countdown);
     setCount(seconds);
     if (!seconds) return beginRecording();
@@ -375,7 +437,9 @@ export default function CameraView({
     } catch {
       // Permission checks still work when browser storage is unavailable.
     }
+    callbacks.current.onDiagnostics?.("phase", { name: "permission-check", time: Date.now() });
     cameraPermission().then((permission) => {
+      callbacks.current.onDiagnostics?.("permission", { state: permission });
       if (cancelled) return;
       setIntroComplete(remembered || permission === "granted");
       setCheckingAccess(false);
@@ -416,6 +480,8 @@ export default function CameraView({
       generation.current++;
       clearInterval(timer.current);
       if (recorder.current?.state === "recording") recorder.current.stop();
+      stopMonitor.current?.();
+      stopMonitor.current = null;
       stopMeter.current?.();
       stopMeter.current = null;
       output.current?.cleanup();
@@ -426,6 +492,13 @@ export default function CameraView({
       callbacks.current.onState("idle");
     };
   }, []);
+  useEffect(() => {
+    callbacks.current.onDiagnostics?.("preview-ui-commit", {
+      phase: state, scriptScrolling: playing,
+      countdown: state === "countdown" ? count : null,
+      preview: previewTrace.current?.snapshot() ?? null,
+    });
+  }, [state, playing, count]);
   useEffect(() => {
     if (state === "ready" && navigator.wakeLock && !wake.current)
       navigator.wakeLock
@@ -541,7 +614,7 @@ export default function CameraView({
     <main className="camera-stage">
       <div className="camera-frame">
         <video
-          ref={video}
+          ref={attachPreview}
           className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
           style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {

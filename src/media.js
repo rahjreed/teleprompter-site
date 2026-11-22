@@ -6,7 +6,7 @@ export const formatTime = (seconds) =>
     .padStart(2, "0")}`;
 export const busy = (state) =>
   ["countdown", "recording", "saving"].includes(state);
-export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
+export function startRecorder(output, Recorder = globalThis.MediaRecorder, report = () => {}) {
   if (!Recorder)
     throw new Error(
       "Video recording is not supported. Try current Chrome or Safari.",
@@ -32,14 +32,19 @@ export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
     "",
   ]) {
     try {
+      report("encoder-attempt", { mimeType: mimeType || "browser-default", width: output.width, height: output.height, ...options });
       const recorder = new Recorder(output.stream, {
         ...options,
         ...(mimeType ? { mimeType } : {}),
       });
       // Recorder events are queued, so callers can attach handlers synchronously.
+      report("encoder-created", { mimeType: recorder.mimeType, state: recorder.state });
+      report("phase", { name: "encoder-start", time: Date.now() });
       recorder.start(1000);
+      report("encoder-started", { mimeType: recorder.mimeType, state: recorder.state });
       return recorder;
     } catch (error) {
+      report("error", { stage: "encoder-attempt", message: error.message, name: error.name });
       lastError = error;
     }
   }
@@ -78,6 +83,7 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
+  report = () => {},
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -110,6 +116,7 @@ export async function requestCamera(
           frameRate,
         },
       }),
+      report,
     );
   } catch (error) {
     if (error.name !== "OverconstrainedError") throw error;
@@ -124,15 +131,19 @@ export async function requestCamera(
           frameRate,
         },
       }),
+      report,
     );
   }
 }
-async function resetCameraZoom(stream) {
+async function resetCameraZoom(stream, report = () => {}) {
   const track = stream.getVideoTracks?.()[0];
+  const { width, height, frameRate, facingMode } = track?.getSettings?.() || {};
+  await report("camera-acquired", { width, height, frameRate, facingMode, state: track?.readyState });
   try {
     const zoom = track?.getCapabilities?.().zoom;
     if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max)) {
       const constraints = track.getConstraints?.() || {};
+      await report("phase", { name: "camera-zoom-reset", time: Date.now() });
       await track.applyConstraints({
         ...constraints,
         advanced: [
@@ -144,6 +155,7 @@ async function resetCameraZoom(stream) {
   } catch {
     // Zoom controls are optional. Keep the usable native stream if unsupported or denied.
   }
+  report("phase", { name: "camera-constraints-complete", time: Date.now() });
   return stream;
 }
 export const framingScale = (framing) => (framing === "close-up" ? 1.2 : 1);
@@ -160,7 +172,7 @@ function portraitCrop(width, height, zoom) {
 }
 
 // Record a compatible native frame directly. Otherwise encode one camera-only crop.
-export function portraitStream(video, source, quality, framing) {
+export function portraitStream(video, source, quality, framing, report = () => {}) {
   const sw = video.videoWidth,
     sh = video.videoHeight;
   if (!sw || !sh)
@@ -210,49 +222,84 @@ export function portraitStream(video, source, quality, framing) {
   if (!context)
     throw new Error("Could not prepare the portrait recording frame.");
   context.imageSmoothingQuality = "high";
-  const frameCallbacks = typeof video.requestVideoFrameCallback === "function";
-  const manualFrames =
-    frameCallbacks &&
-    typeof window.CanvasCaptureMediaStreamTrack?.prototype.requestFrame ===
-      "function";
-  const stream = canvas.captureStream(manualFrames ? 0 : 30);
-  const canvasTrack = stream.getVideoTracks()[0];
+  // Timed capture keeps frame delivery independent of optional requestFrame support.
+  const stream = canvas.captureStream(30);
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
-  let frame;
-  let previousTime = -1;
-  function draw() {
-    const sourceWidth = video.videoWidth;
-    const sourceHeight = video.videoHeight;
-    if (!sourceWidth || !sourceHeight || video.readyState < 2) return;
-    const {
-      x,
-      y,
-      width: cropWidth,
-      height: cropHeight,
-    } = portraitCrop(sourceWidth, sourceHeight, zoom);
-    context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
-    if (manualFrames) canvasTrack.requestFrame();
-  }
-  function next() {
-    if (frameCallbacks || video.currentTime !== previousTime) {
-      previousTime = video.currentTime;
-      draw();
+  let framesDrawn = 0, cameraCallbacks = 0, timerFallbackDraws = 0;
+  let animationFrame, cameraFrame, fallbackTimer;
+  let lastDraw = -Infinity, lastDrawAt = null, lastTrigger = null;
+  let lastDrivenAt = performance.now();
+  let lastCameraCallbackAt = null, cameraMediaTime = null, lastError = null;
+  let stopped = false;
+  const cameraCallbacksSupported = typeof video.requestVideoFrameCallback === "function";
+  function paint(now, trigger) {
+    if (stopped || now - lastDraw < 1000 / 30 - 1 || video.readyState < 2) return;
+    const sourceWidth = video.videoWidth, sourceHeight = video.videoHeight;
+    if (!sourceWidth || !sourceHeight) return;
+    try {
+      const region = portraitCrop(sourceWidth, sourceHeight, zoom);
+      context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, width, height);
+      framesDrawn++;
+      if (trigger === "timer") timerFallbackDraws++;
+      lastDraw = now;
+      lastDrawAt = Date.now();
+      lastTrigger = trigger;
+      lastError = null;
+    } catch (error) {
+      if (!lastError) report("canvas-error", { name: error.name, message: error.message, time: Date.now() });
+      lastError = { name: error.name, message: error.message };
     }
-    frame = frameCallbacks
-      ? video.requestVideoFrameCallback(next)
-      : requestAnimationFrame(next);
   }
-  next();
+  function delivered(now, metadata) {
+    if (stopped) return;
+    lastDrivenAt = now;
+    cameraCallbacks++;
+    lastCameraCallbackAt = Date.now();
+    cameraMediaTime = metadata.mediaTime;
+    paint(now, "camera-frame");
+    cameraFrame = video.requestVideoFrameCallback(delivered);
+  }
+  function animate(now) {
+    if (stopped) return;
+    lastDrivenAt = now;
+    paint(now, "animation-frame");
+    animationFrame = requestAnimationFrame(animate);
+  }
+  function fallback() {
+    if (stopped) return;
+    const now = performance.now();
+    // Independent of compositor callbacks and video.currentTime reporting.
+    if (now - lastDrivenAt >= 100) paint(now, "timer");
+    fallbackTimer = setTimeout(fallback, 1000 / 30);
+  }
+  function contextEvent(event) {
+    report("canvas-lifecycle", { event: event.type, time: Date.now() });
+  }
+  canvas.addEventListener("contextlost", contextEvent);
+  canvas.addEventListener("contextrestored", contextEvent);
+  paint(performance.now(), "initial");
+  if (cameraCallbacksSupported) cameraFrame = video.requestVideoFrameCallback(delivered);
+  else animationFrame = requestAnimationFrame(animate);
+  fallbackTimer = setTimeout(fallback, 1000 / 30);
   return {
-    stream,
-    width,
-    height,
-    path: "center crop",
-    crop,
+    stream, width, height, path: "center crop", crop,
+    get framesDrawn() { return framesDrawn; },
+    get drawDiagnostics() {
+      return { framesDrawn, cameraCallbacks, timerFallbackDraws, lastDrawAt, lastTrigger,
+        lastCameraCallbackAt, cameraMediaTime, lastError,
+        contextLost: context.isContextLost?.() ?? null,
+        canvasTrackState: stream.getVideoTracks()[0]?.readyState };
+    },
     cleanup() {
-      if (frameCallbacks) video.cancelVideoFrameCallback(frame);
-      else cancelAnimationFrame(frame);
-      stream.getVideoTracks().forEach((track) => track.stop());
+      if (stopped) return;
+      stopped = true;
+      if (cameraFrame != null) video.cancelVideoFrameCallback(cameraFrame);
+      if (animationFrame != null) cancelAnimationFrame(animationFrame);
+      clearTimeout(fallbackTimer);
+      canvas.removeEventListener("contextlost", contextEvent);
+      canvas.removeEventListener("contextrestored", contextEvent);
+      stream.getVideoTracks().forEach(track => track.stop());
+      canvas.width = canvas.height = 1;
     },
   };
 }

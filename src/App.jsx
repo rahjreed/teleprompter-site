@@ -1,3 +1,4 @@
+import { createDiagnosticJournal, diagnosticsRequested, createDiagnosticsExport } from "./diagnosticJournal";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignLeft,
@@ -54,9 +55,11 @@ const starter = {
   tags: ["Personal"],
   updated: 0,
 };
-const diagnosticsEnabled =
-  new URLSearchParams(window.location.search).get("recordingDiagnostics") ===
-  "1";
+const diagnosticsEnabled = diagnosticsRequested(window.location.search);
+const diagnosticJournal = diagnosticsEnabled ? createDiagnosticJournal() : null;
+if (diagnosticJournal) {
+  diagnosticJournal.record("page-load", { build: __PROMPTER_RELEASE__, visibility: document.visibilityState });
+}
 export function IconButton({ label, children, ...props }) {
   return (
     <button className="icon-button" aria-label={label} title={label} {...props}>
@@ -163,18 +166,58 @@ export default function App() {
   const installOffer = useInstallOffer();
   const updateWaiting = usePwaUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [diagnostics, setDiagnostics] = useState({});
+  const [diagnostics, setDiagnostics] = useState(() => diagnosticJournal?.snapshot() || {});
   function recordDiagnostics(section, details) {
-    console.info(`[${productName} recording]`, section, details);
-    setDiagnostics((previous) =>
-      section === "error"
-        ? {
-            ...previous,
-            errors: [...(previous.errors || []), details].slice(-10),
-          }
-        : { ...previous, [section]: details },
-    );
+    if (!diagnosticJournal) return;
+    const saved = diagnosticJournal.record(section, details);
+    if (section === "error" || section === "phase") setDiagnostics(saved);
+    if (section === "phase" || section === "camera-acquired") return diagnosticJournal.flush();
   }
+  useEffect(() => {
+    if (!diagnosticJournal) return;
+    let lastHeartbeat = performance.now();
+    const heartbeat = () => {
+      const now = performance.now();
+      recordDiagnostics("performance", {
+        time: now,
+        mainThreadDelayMs: Math.round(Math.max(0, now - lastHeartbeat - 1000)),
+        heapBytes: performance.memory?.usedJSHeapSize ?? null,
+        visibility: document.visibilityState,
+      });
+      lastHeartbeat = now;
+    };
+    heartbeat();
+    const heartbeatTimer = setInterval(heartbeat, 1000);
+    const visibility = () => recordDiagnostics("visibility", { state: document.visibilityState });
+    const lifecycle = (event) => recordDiagnostics("page-lifecycle", { event: event.type, persisted: event.persisted, state: document.visibilityState });
+    for (const name of ["freeze", "resume"]) document.addEventListener(name, lifecycle);
+    window.addEventListener("pageshow", lifecycle);
+    const pagehide = (event) => recordDiagnostics("pagehide", { persisted: event.persisted });
+    const failure = (event) => recordDiagnostics("error", {
+      stage: event.type,
+      message: String(event.message || event.reason?.message || event.reason || "Unhandled error").slice(0, 500),
+    });
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("pagehide", pagehide);
+    window.addEventListener("error", failure);
+    window.addEventListener("unhandledrejection", failure);
+    return () => {
+      clearInterval(heartbeatTimer);
+      for (const name of ["freeze", "resume"]) document.removeEventListener(name, lifecycle);
+      window.removeEventListener("pageshow", lifecycle);
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pagehide", pagehide);
+      window.removeEventListener("error", failure);
+      window.removeEventListener("unhandledrejection", failure);
+    };
+  }, []);
+  useEffect(() => {
+    if (!diagnosticJournal || modal?.type !== "settings") return;
+    const refresh = () => setDiagnostics(diagnosticJournal.snapshot());
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => clearInterval(timer);
+  }, [modal?.type]);
   const revision = useRef(0),
     pendingWrites = useRef(new Set()),
     settingsRef = useRef(defaults);
@@ -947,6 +990,16 @@ export default function App() {
               {diagnosticsEnabled && (
                 <details className="recording-diagnostics">
                   <summary>Recording diagnostics</summary>
+                  <button className="secondary-button" onClick={async () => {
+                    await diagnosticJournal.flush();
+                    const data = createDiagnosticsExport(diagnosticJournal.snapshot(), __PROMPTER_RELEASE__, navigator.userAgent);
+                    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "prompterson-capture-diagnostics.json";
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                  }}>Download diagnostics</button>
                   <pre>
                     {JSON.stringify(
                       {
