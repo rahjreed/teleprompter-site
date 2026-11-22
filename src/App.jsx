@@ -170,8 +170,8 @@ export default function App() {
   function recordDiagnostics(section, details) {
     if (!diagnosticJournal) return;
     const saved = diagnosticJournal.record(section, details);
-    setDiagnostics(saved);
-    return diagnosticJournal.flush();
+    if (section === "error" || section === "phase") setDiagnostics(saved);
+    if (section === "phase" || section === "camera-acquired") return diagnosticJournal.flush();
   }
   useEffect(() => {
     if (!diagnosticJournal) return;
@@ -189,6 +189,9 @@ export default function App() {
     heartbeat();
     const heartbeatTimer = setInterval(heartbeat, 1000);
     const visibility = () => recordDiagnostics("visibility", { state: document.visibilityState });
+    const lifecycle = (event) => recordDiagnostics("page-lifecycle", { event: event.type, persisted: event.persisted, state: document.visibilityState });
+    for (const name of ["freeze", "resume"]) document.addEventListener(name, lifecycle);
+    window.addEventListener("pageshow", lifecycle);
     const pagehide = (event) => recordDiagnostics("pagehide", { persisted: event.persisted });
     const failure = (event) => recordDiagnostics("error", {
       stage: event.type,
@@ -200,12 +203,21 @@ export default function App() {
     window.addEventListener("unhandledrejection", failure);
     return () => {
       clearInterval(heartbeatTimer);
+      for (const name of ["freeze", "resume"]) document.removeEventListener(name, lifecycle);
+      window.removeEventListener("pageshow", lifecycle);
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("pagehide", pagehide);
       window.removeEventListener("error", failure);
       window.removeEventListener("unhandledrejection", failure);
     };
   }, []);
+  useEffect(() => {
+    if (!diagnosticJournal || modal?.type !== "settings") return;
+    const refresh = () => setDiagnostics(diagnosticJournal.snapshot());
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => clearInterval(timer);
+  }, [modal?.type]);
   const revision = useRef(0),
     pendingWrites = useRef(new Set()),
     settingsRef = useRef(defaults);

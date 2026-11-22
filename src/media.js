@@ -172,7 +172,7 @@ function portraitCrop(width, height, zoom) {
 }
 
 // Record a compatible native frame directly. Otherwise encode one camera-only crop.
-export function portraitStream(video, source, quality, framing) {
+export function portraitStream(video, source, quality, framing, report = () => {}) {
   const sw = video.videoWidth,
     sh = video.videoHeight;
   if (!sw || !sh)
@@ -225,46 +225,80 @@ export function portraitStream(video, source, quality, framing) {
   // Timed capture keeps frame delivery independent of optional requestFrame support.
   const stream = canvas.captureStream(30);
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
-  let framesDrawn = 0;
-  let frame;
-  let previousTime = -1;
-  function draw() {
-    const sourceWidth = video.videoWidth;
-    const sourceHeight = video.videoHeight;
-    if (!sourceWidth || !sourceHeight || video.readyState < 2) return;
-    const {
-      x,
-      y,
-      width: cropWidth,
-      height: cropHeight,
-    } = portraitCrop(sourceWidth, sourceHeight, zoom);
-    context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
-    framesDrawn++;
-
-  }
-  let lastDraw = -Infinity;
+  let framesDrawn = 0, cameraCallbacks = 0, timerFallbackDraws = 0;
+  let animationFrame, cameraFrame, fallbackTimer;
+  let lastDraw = -Infinity, lastDrawAt = null, lastTrigger = null;
+  let lastDrivenAt = performance.now();
+  let lastCameraCallbackAt = null, cameraMediaTime = null, lastError = null;
   let stopped = false;
-  function next(now = performance.now()) {
-    if (stopped) return;
-    if (now - lastDraw >= 1000 / 30 && video.currentTime !== previousTime) {
-      previousTime = video.currentTime;
+  const cameraCallbacksSupported = typeof video.requestVideoFrameCallback === "function";
+  function paint(now, trigger) {
+    if (stopped || now - lastDraw < 1000 / 30 - 1 || video.readyState < 2) return;
+    const sourceWidth = video.videoWidth, sourceHeight = video.videoHeight;
+    if (!sourceWidth || !sourceHeight) return;
+    try {
+      const region = portraitCrop(sourceWidth, sourceHeight, zoom);
+      context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, width, height);
+      framesDrawn++;
+      if (trigger === "timer") timerFallbackDraws++;
       lastDraw = now;
-      draw();
+      lastDrawAt = Date.now();
+      lastTrigger = trigger;
+      lastError = null;
+    } catch (error) {
+      if (!lastError) report("canvas-error", { name: error.name, message: error.message, time: Date.now() });
+      lastError = { name: error.name, message: error.message };
     }
-    frame = requestAnimationFrame(next);
   }
-  next();
+  function delivered(now, metadata) {
+    if (stopped) return;
+    lastDrivenAt = now;
+    cameraCallbacks++;
+    lastCameraCallbackAt = Date.now();
+    cameraMediaTime = metadata.mediaTime;
+    paint(now, "camera-frame");
+    cameraFrame = video.requestVideoFrameCallback(delivered);
+  }
+  function animate(now) {
+    if (stopped) return;
+    lastDrivenAt = now;
+    paint(now, "animation-frame");
+    animationFrame = requestAnimationFrame(animate);
+  }
+  function fallback() {
+    if (stopped) return;
+    const now = performance.now();
+    // Independent of compositor callbacks and video.currentTime reporting.
+    if (now - lastDrivenAt >= 100) paint(now, "timer");
+    fallbackTimer = setTimeout(fallback, 1000 / 30);
+  }
+  function contextEvent(event) {
+    report("canvas-lifecycle", { event: event.type, time: Date.now() });
+  }
+  canvas.addEventListener("contextlost", contextEvent);
+  canvas.addEventListener("contextrestored", contextEvent);
+  paint(performance.now(), "initial");
+  if (cameraCallbacksSupported) cameraFrame = video.requestVideoFrameCallback(delivered);
+  else animationFrame = requestAnimationFrame(animate);
+  fallbackTimer = setTimeout(fallback, 1000 / 30);
   return {
-    stream,
-    width,
-    height,
+    stream, width, height, path: "center crop", crop,
     get framesDrawn() { return framesDrawn; },
-    path: "center crop",
-    crop,
+    get drawDiagnostics() {
+      return { framesDrawn, cameraCallbacks, timerFallbackDraws, lastDrawAt, lastTrigger,
+        lastCameraCallbackAt, cameraMediaTime, lastError,
+        contextLost: context.isContextLost?.() ?? null,
+        canvasTrackState: stream.getVideoTracks()[0]?.readyState };
+    },
     cleanup() {
+      if (stopped) return;
       stopped = true;
-      cancelAnimationFrame(frame);
-      stream.getVideoTracks().forEach((track) => track.stop());
+      if (cameraFrame != null) video.cancelVideoFrameCallback(cameraFrame);
+      if (animationFrame != null) cancelAnimationFrame(animationFrame);
+      clearTimeout(fallbackTimer);
+      canvas.removeEventListener("contextlost", contextEvent);
+      canvas.removeEventListener("contextrestored", contextEvent);
+      stream.getVideoTracks().forEach(track => track.stop());
       canvas.width = canvas.height = 1;
     },
   };

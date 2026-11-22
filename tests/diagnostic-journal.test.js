@@ -44,3 +44,16 @@ test("encoder-start checkpoint is on disk before MediaRecorder.start executes", 
   startRecorder({ width: 1080, height: 1920, stream: {} }, Recorder, journal.record);
   assert.equal(journal.snapshot()["encoder-started"].state, "recording");
 });
+
+test("an idle journal cannot overwrite another tab's capture evidence", async () => {
+  const disk = storage();
+  const idle = createDiagnosticJournal({ storage: disk, legacyStorage: null });
+  idle.record("page-load", {});
+  const camera = createDiagnosticJournal({ storage: disk, legacyStorage: null });
+  camera.record("capture", { cameraTrack: { width: 1920 } });
+  camera.record("encoder-started", { state: "recording" });
+  idle.record("performance", { time: 3000 });
+  const recovered = createDiagnosticJournal({ storage: disk, legacyStorage: null }).snapshot();
+  assert.equal(recovered.capture?.cameraTrack.width, 1920);
+  assert.equal(recovered["encoder-started"]?.state, "recording");
+});

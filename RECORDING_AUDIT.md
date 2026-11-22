@@ -71,3 +71,34 @@ A forced full Chromium process crash demonstrated that a newly returned localSto
 The retention tests passed for a renderer crash followed by export in a fresh tab, live frame/encoder data saved before Stop, and a separate full browser process crash followed by restart of its persistent test profile. They verify previously committed evidence survives, not that a browser can execute logging during a completely blocked thread. The export identifies durability as strict, browser-default, unavailable, failed or pending. Reopen the same diagnostic URL after a crash so collection and recovery are explicitly enabled.
 
 Final verification for the retention correction passed 19 unit/MP4 tests, all three diagnostic browser tests (including a full crash during active capture), the existing recording/storage browser cases, both PWA tests, and a 3/60/3-second capture with downloaded H.264/AAC MP4 validation. The recording timer starts after diagnostic checkpoint waits so journal commit latency is excluded from capture duration. Use recordingDiagnostics=0 to disable diagnostic collection without clearing its saved journal. Production remains unchanged.
+
+## Three-second freeze investigation (2026-11-21, based on 6cea6f2)
+
+The reported stage is now confirmed by the user: capture begins, then the image freezes after approximately three seconds on Galaxy S23+ in Chrome and Samsung Internet. No diagnostic export containing that device's active capture evidence was supplied in this run. The phone's exact stopping layer therefore remains unconfirmed.
+
+### Confirmed diagnostic defect
+
+Two tabs shared one whole-journal snapshot. An idle tab's page/performance writes could replace the recording tab's camera and encoder evidence, and export could read the idle tab's stale in-memory journal. A regression test reproduced this loss before the correction. Journal v3 assigns unique event and writer IDs, merges bounded histories in an atomic IndexedDB read/merge/write transaction, merges immediate localStorage checkpoints, and reads shared durable evidence again before export. A separate v3 record prevents an already-open older preview from overwriting the corrected journal. Legacy evidence is imported; no application scripts, recordings or preference stores are changed.
+
+Camera monitoring independently counts video-frame callbacks and playback-quality frames. Timestamped samples include camera callback/media time, canvas draw count and trigger, fallback draws, context/track state, MediaRecorder chunk count/bytes/timecode and output silence. Track, video, canvas, recorder and page lifecycle events are checkpointed. Counters update in memory per frame; health is persisted once per second, and lifecycle events immediately. Routine telemetry no longer re-renders the camera React tree. Camera media-clock advancement alone is no longer treated as proof that a new image arrived.
+
+### Confirmed capture failure mode and correction
+
+In diagnostic commit 6cea6f2, canvas drawing required both requestAnimationFrame delivery and a change in video.currentTime. A controlled moving-color camera source and real MediaRecorder reproduced an image freeze when compositor callbacks were withheld after three seconds. The MP4 container/audio lasted 9.148 seconds, but decoding the video at one sample per second yielded only three image samples. Container duration and live encoder output alone were insufficient validation.
+
+The corrected existing canvas pipeline prefers requestVideoFrameCallback, uses requestAnimationFrame on older browsers, and has an independent timer fallback after 100 ms without callback delivery. Drawing remains capped at 30 fps with timed canvas capture. It does not gate on currentTime. Callback cancellation and generated-track cleanup are idempotent. Camera constraints, field of view, centered 9:16 crop, 1080p target, 12 Mbps target, audio configuration and MP4 finalization remain unchanged. No UI or branding changes were made.
+
+This fixes the reproduced scheduling dependency. It does not prove the physical S23+ has the same browser/compositor trigger, and a JavaScript timer cannot recover a stopped camera driver, GPU context or entirely hung browser thread. Frame counters measure delivery/draw operations rather than pixel identity; the saved-file motion tests below separately inspect decoded image content.
+
+### Current verification
+
+- 20 unit/MP4 tests and the production build passed. The existing main-bundle size warning remains.
+- 33/33 broad Chromium regression tests passed in one completed run: scripts, permissions, recording/download/retrieval, framing, touch dragging, lifecycle cleanup, sharing, installation and four diagnostic retention tests.
+- Retention checks include a renderer crash, full separate-browser process crash, live encoder/frame data before Stop, and export from a competing idle tab.
+- Four additional decoded-motion tests passed: the 6cea6f2 injected-failure reproduction, plus 40-second candidate captures in normal, stalled-callback and no-video-callback modes. Each candidate file decoded to 40 one-second image samples, with changing dominant colors in every five-second window; all were H.264/AAC at 1080x1920 with durations 40.152, 40.265 and 40.161 seconds respectively. This verifies changing content across the timeline, not every encoded frame or physical camera image quality.
+- Both PWA checks passed on rerun, including offline assets and preservation of existing script/video/preferences data. The first attempt timed out waiting for service-worker readiness; no service-worker/application change was made for that retry.
+- The local WebKit process failed at browser.newPage before any app assertion. Physical iPhone Safari/PWA compatibility is still a release gate.
+
+Use the same preview origin with ?recordingDiagnostics=1 in each affected S23+ browser. Record at least 35 seconds, then export Settings > Recording diagnostics. After a freeze/crash, reopen the same origin and export; do not clear site storage. The last committed samples can show whether camera delivery, canvas draws or encoder output stopped first. A complete browser hang cannot execute further logging, and storage eviction or the very latest uncommitted disk write cannot be guaranteed against an OS kill. Validate the complete downloaded take's motion and sound on the phone before approving production.
+
+The final repeated-capture suite also passed all three cases: consecutive 3/60/3-second recordings with full downloaded H.264/AAC timelines and live source tracks, withheld optional video callbacks, and a hung storage-estimate request. Across the separate current Chromium suites, all 40 cases passed (33 broad, four decoded-motion, three endurance/fault cases).

@@ -48,6 +48,7 @@ export default function CameraView({
   const video = useRef(null),
     source = useRef(null),
     recorder = useRef(null),
+    encoderProgress = useRef(null),
     output = useRef(null),
     stopMeter = useRef(null),
     stopMonitor = useRef(null),
@@ -145,7 +146,8 @@ export default function CameraView({
       if (callbacks.current.onDiagnostics) {
         stopMonitor.current = monitorCapture(video.current, stream,
           () => output.current, () => recorder.current,
-          (section, details) => callbacks.current.onDiagnostics?.(section, details));
+          (section, details) => callbacks.current.onDiagnostics?.(section, details),
+          () => encoderProgress.current);
       }
       callbacks.current.onDiagnostics?.("phase", { name: "preview-play", time: Date.now() });
       await video.current.play();
@@ -212,6 +214,7 @@ export default function CameraView({
         source.current,
         preferences.quality,
         preferences.framing,
+        (section, details) => callbacks.current.onDiagnostics?.(section, details),
       );
       output.current = take;
       if (onDiagnostics) {
@@ -229,19 +232,32 @@ export default function CameraView({
       if (onDiagnostics && !stopMonitor.current) {
         stopMonitor.current = monitorCapture(video.current, source.current,
           () => output.current, () => recorder.current,
-          (section, details) => callbacks.current.onDiagnostics?.(section, details));
+          (section, details) => callbacks.current.onDiagnostics?.(section, details),
+          () => encoderProgress.current);
       }
       await callbacks.current.onDiagnostics?.("phase", { name: "encoder-construction", width: take.width, height: take.height, time: Date.now() });
       started.current = performance.now();
       const capture = startRecorder(take, undefined,
         (section, details) => callbacks.current.onDiagnostics?.(section, details));
       recorder.current = capture;
+      encoderProgress.current = { startedAt: Date.now(), chunks: 0, bytes: 0, lastOutputAt: null, lastTimecode: null };
+      for (const event of ["pause", "resume", "stop"]) {
+        capture.addEventListener(event, () => callbacks.current.onDiagnostics?.("encoder-lifecycle", { event, state: capture.state, time: Date.now() }));
+      }
       capture.onstart = () =>
         callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
       let bytes = 0;
       const recordingScript = callbacks.current.script;
       capture.ondataavailable = (e) => {
+        if (e.data.size) {
+          encoderProgress.current = {
+            startedAt: encoderProgress.current.startedAt,
+            chunks: encoderProgress.current.chunks + 1,
+            bytes: encoderProgress.current.bytes + e.data.size,
+            lastOutputAt: Date.now(), lastTimecode: e.timecode,
+          };
+        }
         callbacks.current.onDiagnostics?.("encoder-chunk", { bytes: e.data.size, totalBytes: bytes + e.data.size, timecode: e.timecode });
         if (e.data.size) {
           chunks.push(e.data);

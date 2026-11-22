@@ -7,7 +7,7 @@ test("camera startup checkpoint survives a renderer crash and export from a fres
   await page.goto("/?recordingDiagnostics=1");
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v2")).phase.name)).toBe("camera-request");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v3")).phase.name)).toBe("camera-request");
   const cdp = await context.newCDPSession(page);
   const crashed = page.waitForEvent("crash");
   cdp.send("Page.crash").catch(() => {});
@@ -34,14 +34,14 @@ test("camera frames and encoder checkpoints persist during a take before Stop", 
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
   await expect(page.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v2")).health.samples.length)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v3")).health.samples.length)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Start recording", exact: true }).click();
   await expect(page.getByRole("button", { name: "Stop recording", exact: true })).toBeEnabled();
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem("prompterson-capture-journal-v2"));
+    const saved = JSON.parse(localStorage.getItem("prompterson-capture-journal-v3"));
     return saved.health.samples.some(s => s.encoderState === "recording" && s.cameraFrames > 0 && s.canvasFrames > 0);
   })).toBe(true);
-  const evidence = await page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v2")));
+  const evidence = await page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v3")));
   expect(evidence["camera-granted"].cameraTrack).toBeTruthy();
   expect(evidence["encoder-started"].state).toBe("recording");
   expect(evidence.events.some(e => e.section === "encoder-attempt")).toBe(true);
@@ -58,7 +58,7 @@ test("journal survives a dedicated browser process crash and profile restart", a
   try {
     const tab = await first.newPage();
     await tab.goto("http://127.0.0.1:5187/?recordingDiagnostics=1");
-    await expect.poll(() => tab.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v2"))?.performance?.time)).toBeGreaterThan(0);
+    await expect.poll(() => tab.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v3"))?.performance?.time)).toBeGreaterThan(0);
     // This is a separate browser process, never the runner or the user's browser.
     await tab.getByRole("button", { name: "Open camera", exact: true }).click();
     await tab.getByRole("button", { name: "Enable camera & mic" }).click();
@@ -71,7 +71,7 @@ test("journal survives a dedicated browser process crash and profile restart", a
       open.onsuccess = () => {
         const db = open.result;
         const tx = db.transaction("snapshots", "readonly");
-        const read = tx.objectStore("snapshots").get("journal");
+        const read = tx.objectStore("snapshots").get("journal-v3");
         tx.oncomplete = () => {
           db.close();
           resolve(Boolean(read.result?.health?.samples.some(s => s.encoderState === "recording")));
@@ -109,4 +109,32 @@ test("journal survives a dedicated browser process crash and profile restart", a
   } finally {
     await first.close().catch(() => {});
   }
+});
+
+test("an idle tab exports another tab's recording evidence", async ({ page, context }) => {
+  await page.goto("/?recordingDiagnostics=1");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("combobox", { name: /Countdown/ }).selectOption("0");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  const camera = await context.newPage();
+  await camera.goto("/?recordingDiagnostics=1");
+  await camera.getByRole("button", { name: "Open camera", exact: true }).click();
+  await camera.getByRole("button", { name: "Enable camera & mic" }).click();
+  await expect(camera.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
+  await camera.getByRole("button", { name: "Start recording", exact: true }).click();
+  await expect(camera.getByRole("button", { name: "Stop recording", exact: true })).toBeEnabled({ timeout: 10000 });
+  await camera.waitForTimeout(5000);
+  await camera.getByRole("button", { name: "Stop recording", exact: true }).click();
+  await expect(camera.locator("video.playback")).toBeVisible({ timeout: 20000 });
+  await camera.close();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByText("Recording diagnostics", { exact: true }).click();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download diagnostics" }).click();
+  const { readFile } = await import("node:fs/promises");
+  const exported = JSON.parse(await readFile(await (await pending).path(), "utf8"));
+  expect(exported["encoder-started"].state).toBe("recording");
+  expect(exported.capture.cameraTrack).toBeTruthy();
+  expect(exported.health.samples.some(s => s.encoderState === "recording" && s.canvasFrames > 0)).toBe(true);
+  expect(new Set(exported.events.map(e => e.writerId)).size).toBeGreaterThanOrEqual(2);
 });
