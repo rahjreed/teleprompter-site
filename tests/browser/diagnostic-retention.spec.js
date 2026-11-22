@@ -138,3 +138,53 @@ test("an idle tab exports another tab's recording evidence", async ({ page, cont
   expect(exported.health.samples.some(s => s.encoderState === "recording" && s.canvasFrames > 0)).toBe(true);
   expect(new Set(exported.events.map(e => e.writerId)).size).toBeGreaterThanOrEqual(2);
 });
+
+
+test("a deliberate preview pause in ready state identifies the visible element and JavaScript caller", async ({ page }) => {
+  await page.goto("/?recordingDiagnostics=1");
+  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await page.getByRole("button", { name: "Enable camera & mic" }).click();
+  await expect(page.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
+  const previous = await page.locator("video.camera-preview").evaluate(video => {
+    window.__originalPreviewElement = video;
+    return { paused: video.paused, connected: video.isConnected };
+  });
+  expect(previous.paused).toBe(false);
+  expect(previous.connected).toBe(true);
+  await page.getByRole("button", { name: "Start scrolling" }).click();
+  await expect.poll(() => page.evaluate(() =>
+    document.querySelector("video.camera-preview") === window.__originalPreviewElement)).toBe(true);
+  await page.evaluate(() => document.querySelector("video.camera-preview").pause());
+  await expect.poll(() => page.evaluate(() =>
+    JSON.parse(localStorage.getItem("prompterson-capture-journal-v3"))["preview-paused"]?.lastCall?.action)).toBe("pause");
+  const data = await page.evaluate(() => JSON.parse(localStorage.getItem("prompterson-capture-journal-v3")));
+  const pause = data["preview-paused"];
+  expect(pause.phase).toBe("ready");
+  expect(pause.connected).toBe(true);
+  expect(pause.explicitPauseRecently).toBe(true);
+  expect(pause.elementId).toBe(data["preview-last-playback-call"].elementId);
+  expect(data["preview-last-playback-call"].stack).toContain("evaluate");
+  expect(data["preview-ui-commit"].preview.elementId).toBe(pause.elementId);
+  expect(data["encoder-started"]).toBeUndefined();
+  expect(data["preview-stream-change"].nextSource).toBeTruthy();
+});
+
+test("exported build identity cannot be overwritten by recovered older evidence", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("prompterson-capture-journal-v3", JSON.stringify({
+      schema: 3, build: { commit: "old-preview-commit" },
+      events: [], health: { samples: [] }, sectionClocks: {},
+    }));
+  });
+  await page.goto("/?recordingDiagnostics=1");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByText("Recording diagnostics", { exact: true }).click();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download diagnostics" }).click();
+  const downloaded = await pending;
+  const { readFile } = await import("node:fs/promises");
+  const evidence = JSON.parse(await readFile(await downloaded.path(), "utf8"));
+  expect(evidence.build.commit).not.toBe("old-preview-commit");
+  expect(evidence.exportedBy).toEqual(evidence.build);
+  expect(evidence.events.some(e => e.section === "page-load")).toBe(true);
+});
