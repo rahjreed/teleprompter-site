@@ -5,12 +5,12 @@
 :root {
   font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   color: #ffffff;
-  background: #141416;
+  background: #020617;
   font-synthesis: initial;
   font-weight: 400;
   color-scheme: dark;
-  --accent: #ff525d;
-  --muted: #a8a8b1;
+  --accent: #fbbf24;
+  --muted: #94a3b8;
   --border: #ffffff10;
 }
 * {
@@ -84,7 +84,7 @@ input[type="checkbox"] {
 }
 select {
   max-width: 58%;
-  background: #303035;
+  background: #1e293b;
   border: 1px solid #ffffff14;
   border-radius: 9px;
   padding: 10px;
@@ -93,7 +93,7 @@ select {
 .app {
   min-height: 100dvh;
   background:
-    radial-gradient(ellipse at 65% 0%, #ff525d0d, transparent 38%), #141416;
+    radial-gradient(ellipse at 65% 0%, #fbbf240d, transparent 38%), #020617;
   padding-bottom: 130px;
 }
 .brand-bar {
@@ -117,7 +117,7 @@ select {
 }
 .brand small {
   display: block;
-  color: #9d9da7;
+  color: #94a3b8;
   font-size: 8px;
   letter-spacing: 0.4em;
   margin-top: 5px;
@@ -130,7 +130,7 @@ select {
 .local-badge {
   font-size: 9px;
   letter-spacing: 0.16em;
-  color: #a8a8b1;
+  color: #94a3b8;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -138,7 +138,7 @@ select {
 .local-badge > span {
   width: 5px;
   height: 5px;
-  background: #ff525d;
+  background: #fbbf24;
   border-radius: 50%;
 }
 .icon-button {
@@ -147,7 +147,7 @@ select {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  color: #a8a8b1;
+  color: #94a3b8;
   border-radius: 12px;
 }
 .icon-button:hover {
@@ -186,7 +186,7 @@ select {
 }
 .subtitle {
   font-size: 14px;
-  color: #a8a8b1;
+  color: #94a3b8;
   margin: 0;
 }
 .primary-button,
@@ -204,11 +204,11 @@ select {
 }
 .primary-button {
   background: var(--accent);
-  color: #141416;
+  color: #020617;
   box-shadow: 0 5px 22px #0001;
 }
 .primary-button:hover {
-  background: #ff8790;
+  background: #f59e0b;
 }
 .secondary-button {
   background: #ffffff0d;
@@ -231,12 +231,12 @@ select {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: #222225;
+  background: #0f172a;
   border: 1px solid var(--border);
   border-radius: 13px;
   flex: 1;
   padding: 0 18px;
-  color: #a8a8b1;
+  color: #94a3b8;
 }
 .search input {
   background: none;
@@ -248,7 +248,7 @@ select {
   width: 100%;
 }
 .search input::placeholder {
-  color: #9d9da7;
+  color: #94a3b8;
 }
 .search button {
   padding: 10px;
@@ -262,7 +262,7 @@ select {
   border-radius: 12px;
   padding: 0 20px;
   font-size: 12px;
-  color: #d0d0d7;
+  color: #cbd5e1;
 }
 .filter-button:hover {
   background: #ffffff08;
@@ -290,7 +290,7 @@ select {
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 8px 13px;
-  color: #a8a8b1;
+  color: #94a3b8;
   font-size: 11px;
   white-space: nowrap;
   display: inline-flex;
@@ -300,9 +300,9 @@ select {
   min-height: 36px;
 }
 .chip.active {
-  background: #ff525d12;
-  color: #ff525d;
-  border-color: #ff525d30;
+  background: #fbbf2412;
+  color: #fbbf24;
+  border-color: #fbbf2430;
 }
 .chip > span {
   opacity: 0.7;
@@ -316,7 +316,7 @@ select {
   align-items: center;
   gap: 7px;
   font-size: 10px;
-  color: #9d9da7;
+  color: #94a3b8;
   white-space: nowrap;
 }
 .script-grid {
@@ -330,16 +330,16 @@ select {
   min-height: 304px;
 }
 .create-card {
-  border: 1px dashed #ff525d45;
+  border: 1px dashed #fbbf2445;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  background: linear-gradient(145deg, #ff525d09, #ff525d02);
+  background: linear-gradient(145deg, #fbbf2409, #fbbf2402);
   padding: 24px 12px;
 }
 .create-card:hover {
-  background: #ff525d0d;
+  background: #fbbf240d;
   border-color: var(--accent);
 }
 .create-plus {
@@ -349,7 +349,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ff525d10;
+  background: #fbbf2410;
   color: var(--accent);
   margin: 10px 0 23px;
 }
@@ -360,7 +360,7 @@ select {
 }
 .create-card > span:not(.create-plus):not(.create-caption) {
   font-size: 11px;
-  color: #9d9da7;
+  color: #94a3b8;
   margin-top: 9px;
 }
 .create-caption {
@@ -373,7 +373,7 @@ select {
   margin-top: 33px;
 }
 .script-card {
-  background: linear-gradient(140deg, #222225, #222225);
+  background: linear-gradient(140deg, #0f172a, #0f172a);
   border: 1px solid #ffffff08;
   display: flex;
   flex-direction: column;
@@ -393,7 +393,7 @@ select {
 .card-top {
   display: flex;
   justify-content: space-between;
-  color: #9d9da7;
+  color: #94a3b8;
   align-items: center;
 }
 .script-number {
@@ -410,7 +410,7 @@ select {
 .card-open > p {
   font-size: 12px;
   line-height: 1.7;
-  color: #a8a8b1;
+  color: #94a3b8;
   margin: 0;
   white-space: pre-line;
   display: -webkit-box;
@@ -428,8 +428,8 @@ select {
 .card-tags > span {
   font-size: 9px;
   padding: 4px 8px;
-  color: #d0d0d7;
-  background: #ff525d1a;
+  color: #cbd5e1;
+  background: #fbbf241a;
   border-radius: 5px;
 }
 .card-footer {
@@ -439,7 +439,7 @@ select {
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
-  color: #9d9da7;
+  color: #94a3b8;
   font-size: 9px;
 }
 .card-footer .icon-button {
@@ -461,23 +461,23 @@ select {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: #ff525d0a;
-  color: #ff525d;
+  background: #fbbf240a;
+  color: #fbbf24;
 }
 .studio-note strong {
   font-weight: 400;
   font-size: 13px;
-  color: #d0d0d7;
+  color: #cbd5e1;
 }
 .studio-note p {
   font-size: 11px;
-  color: #9d9da7;
+  color: #94a3b8;
   margin: 7px 0 0;
 }
 .note-line {
   height: 1px;
   width: 80px;
-  background: linear-gradient(90deg, #ff525d33, transparent);
+  background: linear-gradient(90deg, #fbbf2433, transparent);
   margin-left: auto;
 }
 .privacy-note {
@@ -486,7 +486,7 @@ select {
   align-items: center;
   gap: 7px;
   font-size: 9px;
-  color: #9d9da7;
+  color: #94a3b8;
   margin-top: 25px;
   line-height: 1.7;
 }
@@ -498,7 +498,7 @@ select {
   height: 78px;
   width: 360px;
   max-width: calc(100% - 28px);
-  background: #222225cc;
+  background: #0f172acc;
   backdrop-filter: blur(24px);
   border: 1px solid #ffffff12;
   border-radius: 24px;
@@ -517,7 +517,7 @@ select {
   width: 80px;
   height: 66px;
   justify-content: center;
-  color: #9d9da7;
+  color: #94a3b8;
   font-size: 10px;
 }
 .nav-item.active {
@@ -539,20 +539,20 @@ select {
   height: 58px;
   border-radius: 19px;
   background: var(--accent);
-  color: #141416;
+  color: #020617;
   box-shadow:
-    0 0 0 6px #222225,
+    0 0 0 6px #0f172a,
     0 0 0 7px #ffffff0b;
 }
 .camera-nav small {
   font-size: 9px;
-  color: #a8a8b1;
+  color: #94a3b8;
   letter-spacing: 0.04em;
 }
 .count-badge {
   color: var(--accent);
   font-size: 12px;
-  border: 1px solid #ff525d30;
+  border: 1px solid #fbbf2430;
   border-radius: 20px;
   padding: 10px 16px;
 }
@@ -560,12 +560,12 @@ select {
   display: flex;
   align-items: center;
   gap: 13px;
-  background: #ff525d09;
-  border: 1px solid #ff525d20;
+  background: #fbbf2409;
+  border: 1px solid #fbbf2420;
   padding: 16px;
   border-radius: 12px;
   font-size: 12px;
-  color: #a8a8b1;
+  color: #94a3b8;
   line-height: 1.6;
 }
 .storage-note button {
@@ -584,10 +584,10 @@ select {
   place-items: center;
   width: 90px;
   height: 90px;
-  border: 1px solid #ff525d30;
+  border: 1px solid #fbbf2430;
   color: var(--accent);
   border-radius: 25px;
-  background: #ff525d07;
+  background: #fbbf2407;
 }
 .empty-videos h2 {
   font-size: 25px;
@@ -596,7 +596,7 @@ select {
 }
 .empty-videos p {
   font-size: 13px;
-  color: #a8a8b1;
+  color: #94a3b8;
   margin-bottom: 26px;
 }
 .video-group {
@@ -615,7 +615,7 @@ select {
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
-  background: #222225;
+  background: #0f172a;
 }
 .thumbnail {
   aspect-ratio: 9/12;
@@ -623,7 +623,7 @@ select {
   position: relative;
   display: grid;
   place-items: center;
-  background: #141416;
+  background: #020617;
   overflow: hidden;
 }
 .thumbnail > img {
@@ -664,7 +664,7 @@ select {
 }
 .video-card-info small {
   font-size: 9px;
-  color: #a8a8b1;
+  color: #94a3b8;
 }
 .empty {
   text-align: center;
@@ -680,8 +680,8 @@ select {
   transform: translateX(-50%);
   max-width: 540px;
   width: calc(100% - 32px);
-  border: 1px solid #ff525d45;
-  background: #222225;
+  border: 1px solid #fbbf2445;
+  background: #0f172a;
   box-shadow: 0 8px 30px #0005;
   border-radius: 14px;
   display: flex;
@@ -712,7 +712,7 @@ select {
   max-width: 100%;
   max-height: calc(100dvh - 48px);
   overflow: auto;
-  background: #222225;
+  background: #0f172a;
   border: 1px solid #ffffff15;
   box-shadow: 0 20px 90px #0006;
   border-radius: 24px;
@@ -741,12 +741,12 @@ select {
 }
 .muted {
   font-size: 13px;
-  color: #a8a8b1;
+  color: #94a3b8;
   line-height: 1.7;
 }
 .fine-print {
   font-size: 11px;
-  color: #a8a8b1;
+  color: #94a3b8;
   line-height: 1.7;
 }
 .settings-list {
@@ -768,8 +768,8 @@ select {
   max-height: 40dvh;
   overflow: auto;
   padding: 12px;
-  background: #141416;
-  color: #d0d0d7;
+  background: #020617;
+  color: #cbd5e1;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -782,7 +782,7 @@ select {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  color: #d0d0d7;
+  color: #cbd5e1;
 }
 .range-label strong {
   font-weight: 400;
@@ -802,7 +802,7 @@ select {
   align-items: center;
   justify-content: space-between;
   font-size: 10px;
-  color: #a8a8b1;
+  color: #94a3b8;
 }
 .editor-status > span:first-child {
   display: flex;
@@ -832,14 +832,14 @@ select {
   font-size: 17px;
   line-height: 1.85;
   outline: 0;
-  color: #d0d0d7;
+  color: #cbd5e1;
 }
 .editor-tags {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 5px;
-  color: #a8a8b1;
+  color: #94a3b8;
 }
 .option-row {
   display: flex;
@@ -872,7 +872,7 @@ select {
 .tag-form input,
 .rename-label input {
   border: 1px solid #ffffff15;
-  background: #141416;
+  background: #020617;
   border-radius: 10px;
   padding: 12px;
   flex: 1;
@@ -881,7 +881,7 @@ select {
 .rename-label {
   display: block;
   font-size: 12px;
-  color: #d0d0d7;
+  color: #cbd5e1;
 }
 .rename-label input {
   display: block;
@@ -893,7 +893,7 @@ select {
   width: auto;
   height: auto;
   margin-inline: auto;
-  background: #141416;
+  background: #020617;
   border-radius: 12px;
 }
 .button-pair {
@@ -972,10 +972,10 @@ select {
   place-items: center;
   width: 80px;
   height: 80px;
-  border: 1px solid #ff525d30;
+  border: 1px solid #fbbf2430;
   border-radius: 25px;
   margin-bottom: 30px;
-  background: #ff525d08;
+  background: #fbbf2408;
 }
 .camera-intro-icon img {
   width: 68%;
