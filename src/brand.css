@@ -1,9 +1,9 @@
-/* Mr. Prompterson uses charcoal surfaces, silver type, and recording red. */
+/* Mr. Prompterson uses Travel Pro X navy surfaces and gold branding. */
 :root {
-  --brand-background: #141416;
-  --brand-surface: #222225;
-  --accent: #ff525d;
-  --muted: #a8a8b1;
+  --brand-background: #020617;
+  --brand-surface: #0f172a;
+  --accent: #fbbf24;
+  --muted: #94a3b8;
   --border: rgb(255 255 255 / 10%);
   font-family:
     ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
@@ -14,12 +14,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 ::selection {
-  background: rgb(255 82 93 / 30%);
+  background: rgb(251 191 36 / 30%);
   color: #fff;
 }
 .app {
   background:
-    radial-gradient(ellipse at 65% 0%, rgb(255 82 93 / 5%), transparent 38%),
+    radial-gradient(ellipse at 65% 0%, rgb(251 191 36 / 5%), transparent 38%),
     var(--brand-background);
 }
 .brand-bar {
@@ -27,7 +27,7 @@
   height: 56px;
   margin: calc(16px + env(safe-area-inset-top)) auto 0;
   padding: 8px 24px;
-  background: rgb(34 34 37 / 80%);
+  background: rgb(15 23 42 / 80%);
   border: 1px solid var(--border);
   border-radius: 9999px;
   backdrop-filter: blur(24px);
@@ -76,8 +76,8 @@
   min-height: 34px;
   min-width: 34px;
   color: #fff;
-  background: #141416;
-  border: 1px solid rgb(168 168 177 / 25%);
+  background: #020617;
+  border: 1px solid rgb(148 163 184 / 25%);
 }
 .library {
   padding-top: 62px;
@@ -94,9 +94,9 @@
   display: inline-flex;
   align-items: center;
   padding: 9px 16px;
-  border: 1px solid rgb(255 82 93 / 20%);
+  border: 1px solid rgb(251 191 36 / 20%);
   border-radius: 9999px;
-  background: rgb(255 82 93 / 10%);
+  background: rgb(251 191 36 / 10%);
   font-weight: 900;
   letter-spacing: 0.3em;
   font-size: 9px;
@@ -116,30 +116,30 @@
   font-weight: 700;
 }
 .primary-button {
-  color: #141416;
-  border: 1px solid #f4f4f5;
-  background: #f4f4f5;
+  color: #020617;
+  border: 1px solid #fbbf24;
+  background: #fbbf24;
   box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
 }
 .primary-button:hover {
-  background: #d0d0d7;
-  border-color: #d0d0d7;
+  background: #f59e0b;
+  border-color: #f59e0b;
 }
 .secondary-button {
-  background: #141416;
-  border-color: rgb(168 168 177 / 25%);
+  background: #020617;
+  border-color: rgb(148 163 184 / 25%);
 }
 .search {
-  background: #222225;
+  background: #0f172a;
   border-radius: 9999px;
   border-color: rgb(255 255 255 / 10%);
 }
 .search input::placeholder {
-  color: #a8a8b1;
+  color: #94a3b8;
 }
 .filter-button {
   border-radius: 9999px;
-  background: #222225;
+  background: #0f172a;
   border-color: rgb(255 255 255 / 10%);
   font-weight: 700;
 }
@@ -148,34 +148,34 @@
   font-weight: 700;
 }
 .chip.active {
-  color: #ff525d;
-  background: rgb(255 82 93 / 10%);
-  border-color: rgb(255 82 93 / 20%);
+  color: #fbbf24;
+  background: rgb(251 191 36 / 10%);
+  border-color: rgb(251 191 36 / 20%);
 }
 .create-card,
 .script-card {
   border-radius: 40px;
-  background: #222225;
+  background: #0f172a;
   box-shadow: 0 20px 25px -5px rgb(0 0 0 / 10%);
 }
 .script-card {
   border-color: rgb(255 255 255 / 5%);
 }
 .script-card:hover {
-  border-color: rgb(255 82 93 / 50%);
+  border-color: rgb(251 191 36 / 50%);
 }
 .create-card {
-  border: 1px solid rgb(255 82 93 / 30%);
+  border: 1px solid rgb(251 191 36 / 30%);
   background:
-    linear-gradient(rgb(255 82 93 / 5%), rgb(255 82 93 / 5%)), #222225;
+    linear-gradient(rgb(251 191 36 / 5%), rgb(251 191 36 / 5%)), #0f172a;
 }
 .create-card:hover {
-  background: #222225;
-  border-color: rgb(255 82 93 / 50%);
+  background: #0f172a;
+  border-color: rgb(251 191 36 / 50%);
 }
 .create-plus {
   border-radius: 16px;
-  background: #141416;
+  background: #020617;
 }
 .create-card strong {
   font-weight: 900;
@@ -196,17 +196,17 @@
   letter-spacing: -0.025em;
 }
 .card-open > p {
-  color: #a8a8b1;
+  color: #94a3b8;
   font-weight: 300;
 }
 .card-tags > span {
   border-radius: 9999px;
-  color: #ff525d;
-  background: rgb(255 82 93 / 10%);
+  color: #fbbf24;
+  background: rgb(251 191 36 / 10%);
 }
 .note-icon {
   border-radius: 16px;
-  background: #222225;
+  background: #0f172a;
 }
 .studio-note strong {
   font-weight: 700;
@@ -214,7 +214,7 @@
 }
 .bottom-nav {
   border-radius: 9999px;
-  background: rgb(34 34 37 / 80%);
+  background: rgb(15 23 42 / 80%);
   border-color: rgb(255 255 255 / 10%);
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 25%);
 }
@@ -225,13 +225,13 @@
   letter-spacing: 0.15em;
 }
 .camera-nav > span {
-  background: #141416;
-  color: #ff525d;
-  border: 1px solid rgb(255 82 93 / 50%);
+  background: #020617;
+  color: #fbbf24;
+  border: 1px solid rgb(251 191 36 / 50%);
   border-radius: 9999px;
   box-shadow:
-    0 0 0 6px #222225,
-    0 20px 40px -15px rgb(255 82 93 / 30%);
+    0 0 0 6px #0f172a,
+    0 20px 40px -15px rgb(251 191 36 / 30%);
 }
 .camera-nav small {
   text-transform: uppercase;
@@ -240,16 +240,16 @@
   letter-spacing: 0.15em;
 }
 .count-badge {
-  border-color: rgb(255 82 93 / 30%);
+  border-color: rgb(251 191 36 / 30%);
   font-weight: 900;
 }
 .storage-note {
-  background: rgb(255 82 93 / 5%);
-  border-color: rgb(255 82 93 / 20%);
+  background: rgb(251 191 36 / 5%);
+  border-color: rgb(251 191 36 / 20%);
   border-radius: 24px;
 }
 .video-card {
-  background: #222225;
+  background: #0f172a;
   border-radius: 32px;
   border-color: rgb(255 255 255 / 5%);
 }
@@ -264,11 +264,11 @@
   font-weight: 700;
 }
 .empty-videos > span {
-  background: #222225;
+  background: #0f172a;
   border-radius: 24px;
 }
 .sheet {
-  background: #222225;
+  background: #0f172a;
   border-radius: 40px;
   border-color: rgb(255 255 255 / 10%);
 }
@@ -286,13 +286,13 @@
 .tag-form input,
 .rename-label input,
 select {
-  background: #141416;
+  background: #020617;
   border-color: rgb(255 255 255 / 10%);
   border-radius: 14px;
 }
 .toast {
-  background: #222225;
-  border-color: rgb(255 82 93 / 30%);
+  background: #0f172a;
+  border-color: rgb(251 191 36 / 30%);
   border-radius: 24px;
 }
 .camera-intro h1 {
@@ -309,7 +309,7 @@ select {
   width: 128px;
   height: 128px;
   border: 1px solid var(--border);
-  background: radial-gradient(circle at 50% 40%, #343439, #1a1a1d);
+  background: radial-gradient(circle at 50% 40%, #1e293b, #020617);
   border-radius: 32px;
   overflow: hidden;
   margin-bottom: 18px;
@@ -321,7 +321,7 @@ select {
   align-self: end;
 }
 .camera-settings {
-  background: rgb(34 34 37 / 96%);
+  background: rgb(15 23 42 / 96%);
   border-radius: 28px;
 }
 .camera-settings-heading strong {
@@ -350,7 +350,7 @@ select {
   border-radius: 26px;
   border: 1px solid var(--border);
   background:
-    radial-gradient(ellipse at 83% 90%, #36363b, transparent 62%),
+    radial-gradient(ellipse at 83% 90%, #334155, transparent 62%),
     var(--brand-surface);
 }
 .product-welcome > div {
@@ -396,7 +396,7 @@ select {
 .product-about img {
   width: min(55%, 180px);
   border-radius: 24px;
-  background: radial-gradient(circle at 50% 40%, #343439, #1a1a1d);
+  background: radial-gradient(circle at 50% 40%, #1e293b, #020617);
 }
 @media (max-width: 1184px) {
   .brand-bar {
