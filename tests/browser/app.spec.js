@@ -111,7 +111,16 @@ test("countdown cancellation, camera+audio recording, portrait export, playback,
   await expect(page.getByRole("button", { name: "Record Again", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Download", exact: true }).click();
   expect((await download).suggestedFilename()).toMatch(/\.(mp4|webm)$/);
+  // The playback X returns to Home and releases the previous camera stream.
+  await page.locator("video.camera-preview").evaluate((video) => {
+    window.__previousCameraStream = video.srcObject;
+  });
   await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.locator("video.camera-preview")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Search scripts" })).toBeVisible();
+  expect(await page.evaluate(() =>
+    window.__previousCameraStream.getTracks().every(track => track.readyState === "ended")
+  )).toBe(true);
   await page.getByRole("button", { name: "Videos", exact: true }).click();
   await expect(page.locator(".video-card")).toHaveCount(1);
   await page.reload();
@@ -174,4 +183,33 @@ test("storage failure retains the take with an immediate download", async ({
   await expect(
     page.getByRole("button", { name: "Download", exact: true }),
   ).toBeEnabled();
+});
+
+
+test("Record Again replaces the camera session instead of reusing a possibly stalled preview", async ({ page }) => {
+  test.setTimeout(75000);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("combobox", { name: /Countdown/ }).selectOption("0");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await page.getByRole("button", { name: "Enable camera & mic" }).click();
+  await expect(page.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
+  await page.locator("video.camera-preview").evaluate((video) => {
+    window.__previousCameraStream = video.srcObject;
+  });
+  await page.getByRole("button", { name: "Start recording", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Stop recording", exact: true })).toBeEnabled({ timeout: 10000 });
+  await page.waitForTimeout(1200);
+  await page.getByRole("button", { name: "Stop recording", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Record Again", exact: true })).toBeEnabled({ timeout: 20000 });
+  await page.getByRole("button", { name: "Record Again", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
+  const streams = await page.locator("video.camera-preview").evaluate((video) => ({
+    fresh: video.srcObject !== window.__previousCameraStream,
+    oldTracksEnded: window.__previousCameraStream.getTracks().every(track => track.readyState === "ended"),
+    videoTrackLive: video.srcObject?.getVideoTracks()[0]?.readyState === "live",
+  }));
+  expect(streams).toEqual({ fresh: true, oldTracksEnded: true, videoTrackLive: true });
+  await expect(page.locator("video.playback")).toHaveCount(0);
 });
