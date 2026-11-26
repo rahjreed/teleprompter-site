@@ -158,6 +158,7 @@ export default function App() {
     [recordState, setRecordState] = useState("idle"),
     [notice, setNotice] = useState(""),
     [storage, setStorage] = useState({}),
+    [cameraSession, setCameraSession] = useState(0),
     [newTag, setNewTag] = useState(""),
     [rename, setRename] = useState("");
   const installOffer = useInstallOffer();
@@ -278,6 +279,27 @@ export default function App() {
       );
     setView(next);
     setSearch("");
+  }
+  function closeModal() {
+    // Closing a completed take must release the old live camera session.
+    // Reusing that session after playback can leave Android with a frozen preview.
+    if (modal?.type === "play" && view === "camera") {
+      if (busy(recordState)) {
+        setNotice("Finish saving your take before closing the recording preview.");
+        return;
+      }
+      setModal(null);
+      navigate("scripts");
+      return;
+    }
+    setModal(modal?.type === "about" ? { type: "settings" } : null);
+  }
+  function recordAgain() {
+    if (busy(recordState)) return;
+    setModal(null);
+    // Remount the camera so getUserMedia starts with fresh tracks.
+    // Unlike a simple modal dismissal, this does not reuse the old preview.
+    setCameraSession((session) => session + 1);
   }
   async function onRecorded(video) {
     setVideos((previous) => [video, ...previous]);
@@ -561,6 +583,7 @@ export default function App() {
       )}
       {view === "camera" && (
         <CameraView
+          key={cameraSession}
           script={active}
           settings={settings}
           updateSettings={updateSettings}
@@ -829,9 +852,7 @@ export default function App() {
               delete: "Delete permanently?",
             }[modal.type]
           }
-          close={() =>
-            setModal(modal.type === "about" ? { type: "settings" } : null)
-          }
+          close={closeModal}
           wide={modal.type === "play"}
         >
           {modal.type === "settings" && (
@@ -1215,7 +1236,7 @@ export default function App() {
               repair={repairVideo}
               download={download}
               alert={setNotice}
-              recordAgain={view === "camera" ? () => setModal(null) : undefined}
+              recordAgain={view === "camera" ? recordAgain : undefined}
               saving={recordState === "saving"}
             />
           )}
