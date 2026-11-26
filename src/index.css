@@ -1621,3 +1621,13 @@ html[data-camera-simple="1"] .camera-preview {
 html[data-camera-simple="1"] .camera-preview.mirrored {
   transform: scale(var(--framing-scale, 1)) scaleX(-1);
 }
+
+/* Restore original camera container positioning; keep vignette disabled. */
+html[data-camera-simple="1"] .camera-frame {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
