@@ -97,26 +97,14 @@ export async function requestCamera(
     channelCount: { ideal: 1 },
     sampleRate: { ideal: 48000 },
   };
-  // Android camera HALs can stall after a second constraint negotiation.
-  // Request a conventional native sensor mode once; leave zoom untouched.
+  // Match the successful standalone Android camera test exactly.
   if (/Android/i.test(globalThis.navigator?.userAgent || "")) {
-    try {
-      return await devices.getUserMedia({
-        audio,
-        video: {
-          ...selection,
-          width: { ideal: longEdge },
-          height: { ideal: Number(settings.quality) },
-          frameRate: { ideal: 30 },
-        },
-      });
-    } catch (error) {
-      if (error.name !== "OverconstrainedError") throw error;
-      return devices.getUserMedia({
-        audio,
-        video: { facingMode: { ideal: settings.facing } },
-      });
-    }
+    return devices.getUserMedia({
+      audio: true,
+      video: settings.deviceId
+        ? { deviceId: { exact: settings.deviceId } }
+        : { facingMode: settings.facing || "user" },
+    });
   }
   const frameRate = { ideal: 30, max: 30 };
   try {
