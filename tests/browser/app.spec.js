@@ -195,6 +195,8 @@ test("Record Again replaces the camera session instead of reusing a possibly sta
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await page.getByRole("button", { name: "Enable camera & mic" }).click();
   await expect(page.getByRole("button", { name: "Start recording", exact: true })).toBeEnabled({ timeout: 15000 });
+  // Fake UI acceptance does not persist a native permission grant across stopped tracks.
+  await page.context().grantPermissions(["camera", "microphone"]);
   await page.locator("video.camera-preview").evaluate((video) => {
     window.__previousCameraStream = video.srcObject;
   });
