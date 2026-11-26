@@ -992,7 +992,7 @@ export default function App() {
           )}
           {modal.type === "about" && (
             <div className="product-about">
-              <img src={mascot} alt="Mr. Prompterson mascot" />
+              <img src={mascot} alt="Illustrated portrait of Mr. Prompterson" />
               <h3>{productName} — Video Teleprompter</h3>
               <p>{tagline}</p>
               <VersionInfo />

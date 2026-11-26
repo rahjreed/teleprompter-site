@@ -123,7 +123,7 @@ test("production app installs an offline shell and retrieves scripts offline", a
       document.querySelector('link[rel="apple-touch-icon"]').href,
     );
     const touch = await createImageBitmap(await apple.blob());
-    const mascot = await fetch("brand/prompterson/approved-v1/icon-512.png");
+    const mascot = await fetch("brand/prompterson/mascot.svg");
     return {
       favicon: favicon.headers.get("content-type"),
       touch: [touch.width, touch.height, apple.headers.get("content-type")],
@@ -132,7 +132,7 @@ test("production app installs an offline shell and retrieves scripts offline", a
   });
   expect(offlineBrand.favicon).toMatch(/image\/(?:x-icon|vnd.microsoft.icon)/);
   expect(offlineBrand.touch).toEqual([180, 180, "image/png"]);
-  expect(offlineBrand.mascot).toContain("image/png");
+  expect(offlineBrand.mascot).toContain("image/svg+xml");
   expect(
     await page.evaluate(async () =>
       (await caches.keys()).some((key) =>

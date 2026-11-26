@@ -406,7 +406,7 @@ test("settings persist and mobile/desktop layouts fit without horizontal overflo
   await expect(about.getByText("Read it. Record it. Share it.")).toBeVisible();
   await expect(about.getByText("Presented by Travel Pro X")).toBeVisible();
   await expect(
-    about.getByRole("img", { name: "Mr. Prompterson mascot" }),
+    about.getByRole("img", { name: "Illustrated portrait of Mr. Prompterson" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close dialog" }).click();
   await page
