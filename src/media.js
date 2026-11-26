@@ -100,8 +100,14 @@ export function isAppleCamera(nav = globalThis.navigator) {
     (nav?.platform === "MacIntel" && (nav?.maxTouchPoints || 0) > 1);
 }
 
+// Temporarily disable the unsupported Zoomed Out preset on iOS only.
+// Android keeps all three framing modes.
+export function supportedFraming(framing, nav = globalThis.navigator) {
+  return isAppleCamera(nav) && framing === "zoomed-out" ? "standard" : framing;
+}
+
 export function wantsIOSThreeFour(settings, nav = globalThis.navigator) {
-  return settings?.framing === "zoomed-out" && isAppleCamera(nav);
+  return supportedFraming(settings?.framing, nav) === "zoomed-out" && isAppleCamera(nav);
 }
 
 export function zoomedOutCrop(width, height, nav = globalThis.navigator) {
@@ -254,8 +260,10 @@ export function portraitStream(video, source, quality, framing, report) {
     sh = video.videoHeight;
   if (!sw || !sh)
     throw new Error("Camera is warming up. Try recording again in a moment.");
-  const zoom = framingScale(framing);
-  const fullView = framing === "zoomed-out";
+  // Ignore stale iOS Zoomed Out preferences even if they bypass the UI.
+  const activeFraming = supportedFraming(framing);
+  const zoom = framingScale(activeFraming);
+  const fullView = activeFraming === "zoomed-out";
   const crop = fullView
     ? zoomedOutCrop(sw, sh)
     : portraitCrop(sw, sh, zoom);
