@@ -389,7 +389,7 @@ test("settings persist and mobile/desktop layouts fit without horizontal overflo
   await page.goto("/");
   await expect(page).toHaveTitle("Mr. Prompterson — Video Teleprompter");
   await expect(
-    page.getByRole("link", { name: /Mr\. Prompterson By Callista Digital/ }),
+    page.getByRole("link", { name: /Mr\. Prompterson Presented by Travel Pro X/ }),
   ).toBeVisible();
   const welcome = page.getByRole("region", {
     name: "Welcome to Mr. Prompterson",
@@ -404,9 +404,9 @@ test("settings persist and mobile/desktop layouts fit without horizontal overflo
   await page.getByRole("button", { name: "About Mr. Prompterson" }).click();
   const about = page.getByRole("dialog", { name: "About Mr. Prompterson" });
   await expect(about.getByText("Read it. Record it. Share it.")).toBeVisible();
-  await expect(about.getByText("By Callista Digital")).toBeVisible();
+  await expect(about.getByText("Presented by Travel Pro X")).toBeVisible();
   await expect(
-    about.getByRole("img", { name: "Illustrated portrait of Mr. Prompterson" }),
+    about.getByRole("img", { name: "Mr. Prompterson mascot" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close dialog" }).click();
   await page
