@@ -44,6 +44,11 @@ export default function CameraView({
   onDiagnostics,
   alert,
 }) {
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("cameraSimple") !== "1") return;
+    document.documentElement.dataset.cameraSimple = "1";
+    return () => { delete document.documentElement.dataset.cameraSimple; };
+  }, []);
   const video = useRef(null),
     source = useRef(null),
     recorder = useRef(null),
