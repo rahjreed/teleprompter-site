@@ -18,6 +18,7 @@ import {
   formatTime,
   inspectRecording,
   cameraPermission,
+  isAppleCamera,
   mediaError,
   portraitStream,
   requestCamera,
@@ -76,6 +77,7 @@ export default function CameraView({
     [position, setPosition] = useState(settings.position ?? 0),
     [devices, setDevices] = useState([]),
     [resolution, setResolution] = useState(""),
+    [sourceAspect, setSourceAspect] = useState(null),
     [front, setFront] = useState(true);
   callbacks.current = {
     onRecorded,
@@ -155,6 +157,7 @@ export default function CameraView({
     if (busy(stateRef.current) || stateRef.current === "requesting") return;
     const token = ++generation.current;
     stopTracks("enable-camera");
+    setSourceAspect(null);
     setError("");
     transition("requesting");
     try {
@@ -192,6 +195,8 @@ export default function CameraView({
         );
       await video.current.play();
       if (!mounted.current || token !== generation.current) return;
+      if (video.current.videoWidth && video.current.videoHeight)
+        setSourceAspect(video.current.videoWidth / video.current.videoHeight);
       if (onDiagnostics)
         onDiagnostics("capture", captureDetails(stream, video.current));
       setResolution(
@@ -669,9 +674,11 @@ export default function CameraView({
       <div className="camera-frame">
         <video
           ref={bindPreview}
-          className={`camera-preview ${settings.mirror && front ? "mirrored" : ""} ${settings.framing === "zoomed-out" ? "full-view" : ""}`}
+          className={`camera-preview ${settings.mirror && front ? "mirrored" : ""} ${settings.framing === "zoomed-out" ? "full-view" : ""} ${settings.framing === "zoomed-out" && isAppleCamera() && sourceAspect > 3 / 4 ? "ios-three-four" : ""}`}
           style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {
+            if (video.current?.videoWidth && video.current?.videoHeight)
+              setSourceAspect(video.current.videoWidth / video.current.videoHeight);
             const take = output.current;
             if (
               stateRef.current === "recording" &&
@@ -864,7 +871,19 @@ export default function CameraView({
             <select
               disabled={busy(state)}
               value={settings.framing}
-              onChange={(e) => updateSettings({ framing: e.target.value })}
+              onChange={(e) => {
+                const framing = e.target.value;
+                const oldFraming = callbacks.current.settings.framing;
+                const patch = { framing };
+                updateSettings(patch);
+                // Only the iOS 3:4 preset requires a new camera mode. Android
+                // and Standard <-> Close-Up retain their live camera streams.
+                if (
+                  source.current && isAppleCamera() &&
+                  (framing === "zoomed-out" || oldFraming === "zoomed-out") &&
+                  framing !== oldFraming
+                ) enable(patch);
+              }
             >
               <option value="zoomed-out">Zoomed Out</option>
               <option value="standard">Standard</option>
