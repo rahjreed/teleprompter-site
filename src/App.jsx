@@ -966,9 +966,16 @@ export default function App() {
                   value={settings.framing}
                   onChange={(e) => updateSettings({ framing: e.target.value })}
                 >
+                  <option value="zoomed-out">Zoomed Out</option>
                   <option value="standard">Standard</option>
                   <option value="close-up">Close-Up</option>
                 </select>
+                {settings.framing === "zoomed-out" && (
+                  <small className="fine-print">
+                    Shows the entire available camera picture in a 9:16 video.
+                    Dark borders may appear; this does not activate an ultrawide lens.
+                  </small>
+                )}
               </label>
               <label className="select-label">
                 Microphone

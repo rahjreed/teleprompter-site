@@ -6,6 +6,8 @@ import {
   busy,
   fileName,
   formatTime,
+  framingScale,
+  fitFullCameraFrame,
   mediaError,
   requestCamera,
   startRecorder,
@@ -49,6 +51,23 @@ test("recording busy states protect navigation", () => {
   for (const state of ["idle", "ready", "error"])
     assert.equal(busy(state), false);
 });
+test("Zoomed Out fits the full camera image into 9:16 without distortion", () => {
+  assert.equal(framingScale("standard"), 1);
+  assert.equal(framingScale("close-up"), 1.2);
+  assert.equal(framingScale("zoomed-out"), 1);
+  assert.deepEqual(fitFullCameraFrame(1080, 1440, 720, 1280), {
+    x: 0, y: 160, width: 720, height: 960,
+  });
+  assert.deepEqual(fitFullCameraFrame(1080, 1920, 1080, 1920), {
+    x: 0, y: 0, width: 1080, height: 1920,
+  });
+  const wide = fitFullCameraFrame(1920, 1080, 1080, 1920);
+  assert.equal(wide.x, 0);
+  assert.equal(wide.width, 1080);
+  assert.ok(wide.y > 600);
+  assert.ok(wide.height < 700);
+});
+
 test("recorder prefers MP4, then retries a supported format if the encoder fails", () => {
   const attempts = [];
   class TestRecorder {
