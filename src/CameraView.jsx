@@ -883,7 +883,7 @@ export default function CameraView({
                   (framing === "zoomed-out" || oldFraming === "zoomed-out") &&
                   framing !== oldFraming
                 ) enable(patch);
-              }
+              }}
             >
               <option value="zoomed-out">Zoomed Out</option>
               <option value="standard">Standard</option>
