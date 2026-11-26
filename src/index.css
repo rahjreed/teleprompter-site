@@ -1591,3 +1591,20 @@ select {
     font-size: 13px;
   }
 }
+
+/* Opt-in isolation of Android video compositor transforms. */
+html[data-camera-simple="1"] .camera-frame {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: auto;
+  transform: none;
+}
+html[data-camera-simple="1"] .camera-preview,
+html[data-camera-simple="1"] .camera-preview.mirrored {
+  transform: none;
+}
+html[data-camera-simple="1"] .camera-vignette {
+  display: none;
+}
