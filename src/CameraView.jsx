@@ -885,7 +885,7 @@ export default function CameraView({
                 ) enable(patch);
               }}
             >
-              <option value="zoomed-out">Zoomed Out</option>
+              {!isAppleCamera() && <option value="zoomed-out">Zoomed Out</option>}
               <option value="standard">Standard</option>
               <option value="close-up">Close-Up</option>
             </select>
