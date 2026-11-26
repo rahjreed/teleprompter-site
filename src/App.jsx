@@ -1,3 +1,8 @@
+import {
+  createDiagnosticJournal,
+  diagnosticsRequested,
+} from "./diagnosticJournal";
+import { diagnosticExport } from "./diagnosticExport";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignLeft,
@@ -54,9 +59,15 @@ const starter = {
   tags: ["Personal"],
   updated: 0,
 };
-const diagnosticsEnabled =
-  new URLSearchParams(window.location.search).get("recordingDiagnostics") ===
-  "1";
+const diagnosticsEnabled = diagnosticsRequested(window.location.search);
+const diagnosticJournal = diagnosticsEnabled
+  ? createDiagnosticJournal({ build: __PROMPTER_RELEASE__ })
+  : null;
+if (diagnosticJournal)
+  diagnosticJournal.record("page-load", {
+    build: __PROMPTER_RELEASE__,
+    visibility: document.visibilityState,
+  });
 export function IconButton({ label, children, ...props }) {
   return (
     <button className="icon-button" aria-label={label} title={label} {...props}>
@@ -164,18 +175,48 @@ export default function App() {
   const installOffer = useInstallOffer();
   const updateWaiting = usePwaUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [diagnostics, setDiagnostics] = useState({});
+  const [diagnostics, setDiagnostics] = useState(
+    () => diagnosticJournal?.snapshot() || {},
+  );
   function recordDiagnostics(section, details) {
-    console.info(`[${productName} recording]`, section, details);
-    setDiagnostics((previous) =>
-      section === "error"
-        ? {
-            ...previous,
-            errors: [...(previous.errors || []), details].slice(-10),
-          }
-        : { ...previous, [section]: details },
-    );
+    diagnosticJournal?.record(section, details);
   }
+  useEffect(() => {
+    if (!diagnosticJournal || modal?.type !== "settings") return;
+    const refresh = () => setDiagnostics(diagnosticJournal.snapshot());
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => clearInterval(timer);
+  }, [modal?.type]);
+  useEffect(() => {
+    if (!diagnosticJournal) return;
+    const event = (e) =>
+      recordDiagnostics("page-lifecycle", {
+        at: Date.now(),
+        event: e.type,
+        visibility: document.visibilityState,
+        persisted: e.persisted,
+      });
+    const failure = (e) =>
+      recordDiagnostics("error", {
+        stage: e.type,
+        message: e.message || e.reason?.message || String(e.reason),
+      });
+    for (const name of ["pagehide", "pageshow"])
+      window.addEventListener(name, event);
+    for (const name of ["visibilitychange", "freeze", "resume"])
+      document.addEventListener(name, event);
+    for (const name of ["error", "unhandledrejection"])
+      window.addEventListener(name, failure);
+    return () => {
+      for (const name of ["pagehide", "pageshow"])
+        window.removeEventListener(name, event);
+      for (const name of ["visibilitychange", "freeze", "resume"])
+        document.removeEventListener(name, event);
+      for (const name of ["error", "unhandledrejection"])
+        window.removeEventListener(name, failure);
+    };
+  }, []);
   const revision = useRef(0),
     pendingWrites = useRef(new Set()),
     settingsRef = useRef(defaults);
@@ -968,15 +1009,39 @@ export default function App() {
               {diagnosticsEnabled && (
                 <details className="recording-diagnostics">
                   <summary>Recording diagnostics</summary>
+                  <button
+                    className="secondary-button"
+                    onClick={async () => {
+                      await diagnosticJournal.flush();
+                      const data = diagnosticExport(
+                        diagnosticJournal.snapshot(),
+                        {
+                          build: __PROMPTER_RELEASE__,
+                          browser: navigator.userAgent,
+                          writerId: diagnosticJournal.writerId,
+                        },
+                      );
+                      const url = URL.createObjectURL(
+                        new Blob([JSON.stringify(data, null, 2)], {
+                          type: "application/json",
+                        }),
+                      );
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = "prompterson-capture-diagnostics.json";
+                      link.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 10000);
+                    }}
+                  >
+                    Download diagnostics
+                  </button>
                   <pre>
                     {JSON.stringify(
-                      {
+                      diagnosticExport(diagnostics, {
+                        build: __PROMPTER_RELEASE__,
                         browser: navigator.userAgent,
-                        platform:
-                          navigator.userAgentData?.platform ||
-                          navigator.platform,
-                        ...diagnostics,
-                      },
+                        writerId: diagnosticJournal.writerId,
+                      }),
                       null,
                       2,
                     )}

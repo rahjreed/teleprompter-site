@@ -1,3 +1,4 @@
+import { sanitizeCapture, trackEvidence } from "./cameraEvidence.js";
 export const formatTime = (seconds) =>
   `${Math.floor(seconds / 60)
     .toString()
@@ -6,7 +7,11 @@ export const formatTime = (seconds) =>
     .padStart(2, "0")}`;
 export const busy = (state) =>
   ["countdown", "recording", "saving"].includes(state);
-export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
+export function startRecorder(
+  output,
+  Recorder = globalThis.MediaRecorder,
+  report,
+) {
   if (!Recorder)
     throw new Error(
       "Video recording is not supported. Try current Chrome or Safari.",
@@ -32,12 +37,25 @@ export function startRecorder(output, Recorder = globalThis.MediaRecorder) {
     "",
   ]) {
     try {
+      report?.("encoder-attempt", {
+        at: Date.now(),
+        mimeType,
+        width: output.width,
+        height: output.height,
+        ...options,
+      });
       const recorder = new Recorder(output.stream, {
         ...options,
         ...(mimeType ? { mimeType } : {}),
       });
       // Recorder events are queued, so callers can attach handlers synchronously.
+      report?.("phase", { at: Date.now(), name: "encoder-start" });
       recorder.start(1000);
+      report?.("encoder-started", {
+        at: Date.now(),
+        state: recorder.state,
+        mimeType: recorder.mimeType,
+      });
       return recorder;
     } catch (error) {
       lastError = error;
@@ -78,11 +96,26 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
+  report,
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
       "Camera access needs HTTPS and a supported browser. Use HTTPS or localhost.",
     );
+  const acquire = async (constraints) => {
+    report?.("camera-request", {
+      at: Date.now(),
+      constraints: sanitizeCapture(constraints),
+    });
+    const stream = await devices.getUserMedia(constraints);
+    if (report)
+      report("camera-acquired", {
+        at: Date.now(),
+        camera: trackEvidence(stream?.getVideoTracks?.()[0]),
+        audio: trackEvidence(stream?.getAudioTracks?.()[0]),
+      });
+    return stream;
+  };
   // Ask for detail without imposing an aspect ratio on the camera sensor.
   // A forced 9:16 track can be a severe digital crop of a native 4:3/16:9 camera.
   const longEdge = Math.round((Number(settings.quality) * 16) / 9);
@@ -99,7 +132,7 @@ export async function requestCamera(
   };
   // Match the successful standalone Android camera test exactly.
   if (/Android/i.test(globalThis.navigator?.userAgent || "")) {
-    return devices.getUserMedia({
+    return acquire({
       audio: true,
       video: settings.deviceId
         ? { deviceId: { exact: settings.deviceId } }
@@ -109,7 +142,7 @@ export async function requestCamera(
   const frameRate = { ideal: 30, max: 30 };
   try {
     return await resetCameraZoom(
-      await devices.getUserMedia({
+      await acquire({
         audio,
         video: {
           ...selection,
@@ -123,7 +156,7 @@ export async function requestCamera(
   } catch (error) {
     if (error.name !== "OverconstrainedError") throw error;
     return resetCameraZoom(
-      await devices.getUserMedia({
+      await acquire({
         audio,
         video: {
           facingMode: { ideal: settings.facing },
@@ -169,7 +202,7 @@ function portraitCrop(width, height, zoom) {
 }
 
 // Record a compatible native frame directly. Otherwise encode one camera-only crop.
-export function portraitStream(video, source, quality, framing) {
+export function portraitStream(video, source, quality, framing, report) {
   const sw = video.videoWidth,
     sh = video.videoHeight;
   if (!sw || !sh)
@@ -227,9 +260,21 @@ export function portraitStream(video, source, quality, framing) {
   const stream = canvas.captureStream(manualFrames ? 0 : 30);
   const canvasTrack = stream.getVideoTracks()[0];
   source.getAudioTracks().forEach((track) => stream.addTrack(track));
+  // RVFC can stop while the video still plays. Keep Android capture moving in
+  // that independently reproducible case; this cannot revive a paused camera.
+  const android = /Android/i.test(globalThis.navigator?.userAgent || "");
+  const rate = Number(trackSettings.frameRate);
+  const fallbackRate = Number.isFinite(rate) && rate > 0 ? rate : 30;
+  let stopped = false,
+    fallbackTimer,
+    framesDrawn = 0,
+    fallbackDraws = 0,
+    lastDrawAt = null;
+  let lastPrimaryDraw = performance.now();
   let frame;
   let previousTime = -1;
-  function draw() {
+  function draw(trigger = "primary") {
+    if (stopped || (android && video.paused)) return false;
     const sourceWidth = video.videoWidth;
     const sourceHeight = video.videoHeight;
     if (!sourceWidth || !sourceHeight || video.readyState < 2) return;
@@ -241,24 +286,61 @@ export function portraitStream(video, source, quality, framing) {
     } = portraitCrop(sourceWidth, sourceHeight, zoom);
     context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
     if (manualFrames) canvasTrack.requestFrame();
+    framesDrawn++;
+    if (trigger === "timer") fallbackDraws++;
+    lastDrawAt = Date.now();
+    return true;
   }
   function next() {
+    if (stopped) return;
     if (frameCallbacks || video.currentTime !== previousTime) {
       previousTime = video.currentTime;
-      draw();
+      if (draw()) lastPrimaryDraw = performance.now();
     }
     frame = frameCallbacks
       ? video.requestVideoFrameCallback(next)
       : requestAnimationFrame(next);
   }
   next();
+  function fallback() {
+    if (stopped) return;
+    if (performance.now() - lastPrimaryDraw >= 100) draw("timer");
+    fallbackTimer = setTimeout(fallback, 1000 / fallbackRate);
+  }
+  if (android) fallbackTimer = setTimeout(fallback, 1000 / fallbackRate);
+  const contextEvent = (event) =>
+    report?.("canvas-lifecycle", { at: Date.now(), event: event.type });
+  canvas.addEventListener("contextlost", contextEvent);
+  canvas.addEventListener("contextrestored", contextEvent);
   return {
     stream,
     width,
     height,
     path: "center crop",
     crop,
+    get framesDrawn() {
+      return framesDrawn;
+    },
+    get drawDiagnostics() {
+      return {
+        framesDrawn,
+        fallbackDraws,
+        lastDrawAt,
+        currentCrop: portraitCrop(video.videoWidth, video.videoHeight, zoom),
+        width,
+        height,
+        manualFrames,
+        callbackSupported: frameCallbacks,
+        fallbackEnabled: android,
+        contextLost: context.isContextLost?.() ?? null,
+      };
+    },
     cleanup() {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(fallbackTimer);
+      canvas.removeEventListener("contextlost", contextEvent);
+      canvas.removeEventListener("contextrestored", contextEvent);
       if (frameCallbacks) video.cancelVideoFrameCallback(frame);
       else cancelAnimationFrame(frame);
       stream.getVideoTracks().forEach((track) => track.stop());

@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import { observePreview } from "./previewLifecycle";
+import { monitorCapture } from "./captureMonitor";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   AlignLeft,
@@ -44,8 +46,13 @@ export default function CameraView({
   onDiagnostics,
   alert,
 }) {
+  const cameraInstance = useRef(null);
+  if (!cameraInstance.current) cameraInstance.current = crypto.randomUUID();
   const video = useRef(null),
     source = useRef(null),
+    previewLifecycle = useRef(null),
+    stopMonitor = useRef(null),
+    encoderProgress = useRef(null),
     recorder = useRef(null),
     output = useRef(null),
     stopMeter = useRef(null),
@@ -78,6 +85,23 @@ export default function CameraView({
     settings,
     script,
   };
+  const bindPreview = useCallback((node) => {
+    if (video.current === node) return;
+    previewLifecycle.current?.stop("react-ref-change");
+    previewLifecycle.current = null;
+    video.current = node;
+    if (node && callbacks.current.onDiagnostics)
+      previewLifecycle.current = observePreview(node, {
+        report: (section, details) =>
+          callbacks.current.onDiagnostics?.(section, details),
+        getSource: () => source.current,
+        getState: () => stateRef.current,
+        cameraInstanceId: cameraInstance.current,
+      });
+  }, []);
+  useEffect(() => {
+    previewLifecycle.current?.commit(state);
+  });
   function reportError(stage, error) {
     callbacks.current.onDiagnostics?.("error", {
       stage,
@@ -85,11 +109,25 @@ export default function CameraView({
     });
   }
   function transition(next) {
+    callbacks.current.onDiagnostics?.("state", {
+      at: Date.now(),
+      name: next,
+      from: stateRef.current,
+      cameraInstanceId: cameraInstance.current,
+      preview: previewLifecycle.current?.snapshot(),
+    });
     stateRef.current = next;
     if (mounted.current) setState(next);
     callbacks.current.onState(next);
   }
-  function stopTracks() {
+  function stopTracks(reason) {
+    callbacks.current.onDiagnostics?.("camera-release", {
+      at: Date.now(),
+      reason,
+      cameraInstanceId: cameraInstance.current,
+    });
+    stopMonitor.current?.();
+    stopMonitor.current = null;
     source.current?.getTracks().forEach((t) => {
       t.onended = null;
       t.stop();
@@ -116,12 +154,19 @@ export default function CameraView({
   async function enable(patch = {}) {
     if (busy(stateRef.current) || stateRef.current === "requesting") return;
     const token = ++generation.current;
-    stopTracks();
+    stopTracks("enable-camera");
     setError("");
     transition("requesting");
     try {
       const prefs = { ...callbacks.current.settings, ...patch };
-      const stream = await requestCamera(prefs);
+      const stream = await requestCamera(
+        prefs,
+        undefined,
+        callbacks.current.onDiagnostics
+          ? (section, details) =>
+              callbacks.current.onDiagnostics?.(section, details)
+          : undefined,
+      );
       if (!mounted.current || token !== generation.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -134,36 +179,18 @@ export default function CameraView({
           : prefs.facing === "user",
       );
       video.current.srcObject = stream;
+      if (callbacks.current.onDiagnostics)
+        stopMonitor.current = monitorCapture(
+          video.current,
+          stream,
+          () => output.current,
+          () => recorder.current,
+          (section, details) =>
+            callbacks.current.onDiagnostics?.(section, details),
+          () => encoderProgress.current,
+          () => previewLifecycle.current?.snapshot(),
+        );
       await video.current.play();
-      // Android preview diagnostics: observe playback without changing recording.
-      if (/Android/i.test(navigator.userAgent)) {
-        const element = video.current;
-        const track = stream.getVideoTracks()[0];
-        let frames = 0, last = performance.now(), handle;
-        const tick = () => {
-          if (source.current !== stream || !element.isConnected) return;
-          frames++;
-          last = performance.now();
-          handle = element.requestVideoFrameCallback(tick);
-        };
-        if (element.requestVideoFrameCallback)
-          handle = element.requestVideoFrameCallback(tick);
-        const monitor = setInterval(() => {
-          if (source.current !== stream || !element.isConnected) {
-            clearInterval(monitor);
-            if (handle != null) element.cancelVideoFrameCallback?.(handle);
-            return;
-          }
-          callbacks.current.onDiagnostics?.("previewHealth", {
-            frames, frameAgeMs: Math.round(performance.now() - last),
-            paused: element.paused, currentTime: element.currentTime,
-            readyState: element.readyState, trackState: track.readyState,
-            muted: track.muted, sameStream: element.srcObject === stream,
-            settings: track.getSettings(),
-          });
-        }, 1000);
-      }
-
       if (!mounted.current || token !== generation.current) return;
       if (onDiagnostics)
         onDiagnostics("capture", captureDetails(stream, video.current));
@@ -202,7 +229,7 @@ export default function CameraView({
       transition("ready");
     } catch (e) {
       if (mounted.current && token === generation.current) {
-        stopTracks();
+        stopTracks("camera-request-error");
         reportError("capture", e);
         setError(mediaError(e));
         transition("error");
@@ -221,11 +248,26 @@ export default function CameraView({
           "Camera or microphone stopped. Enable them again before recording.",
         );
       const preferences = callbacks.current.settings;
+      if (
+        /Android/i.test(navigator.userAgent) &&
+        (video.current.paused ||
+          video.current.ended ||
+          video.current.srcObject !== source.current)
+      )
+        throw new Error(
+          "Camera preview is not playing. Use Try again to open a fresh camera before recording.",
+        );
+      callbacks.current.onDiagnostics?.("recording-source", {
+        at: Date.now(),
+        preview: previewLifecycle.current?.snapshot(),
+      });
       const take = portraitStream(
         video.current,
         source.current,
         preferences.quality,
         preferences.framing,
+        (section, details) =>
+          callbacks.current.onDiagnostics?.(section, details),
       );
       output.current = take;
       if (onDiagnostics) {
@@ -241,14 +283,45 @@ export default function CameraView({
         stopMeter.current = measureMicrophone(source.current);
       }
       started.current = performance.now();
-      const capture = startRecorder(take);
+      const capture = startRecorder(take, undefined, (section, details) =>
+        callbacks.current.onDiagnostics?.(section, details),
+      );
       recorder.current = capture;
+      encoderProgress.current = {
+        startedAt: Date.now(),
+        chunks: 0,
+        bytes: 0,
+        lastOutputAt: null,
+        lastTimecode: null,
+      };
+      for (const name of ["start", "pause", "resume", "stop"])
+        capture.addEventListener(name, () =>
+          callbacks.current.onDiagnostics?.("encoder-lifecycle", {
+            at: Date.now(),
+            event: name,
+            state: capture.state,
+          }),
+        );
       capture.onstart = () =>
         callbacks.current.onDiagnostics?.("encoder", encoderDetails(capture));
       const chunks = [];
       let bytes = 0;
       const recordingScript = callbacks.current.script;
       capture.ondataavailable = (e) => {
+        if (e.data.size)
+          encoderProgress.current = {
+            ...encoderProgress.current,
+            chunks: encoderProgress.current.chunks + 1,
+            bytes: encoderProgress.current.bytes + e.data.size,
+            lastOutputAt: Date.now(),
+            lastTimecode: e.timecode,
+          };
+        callbacks.current.onDiagnostics?.("encoder-chunk", {
+          at: Date.now(),
+          bytes: e.data.size,
+          totalBytes: bytes + e.data.size,
+          timecode: e.timecode,
+        });
         if (e.data.size) {
           chunks.push(e.data);
           bytes += e.data.size;
@@ -294,7 +367,16 @@ export default function CameraView({
           let duration = elapsed;
           let needsRepair = false;
           try {
+            callbacks.current.onDiagnostics?.("phase", {
+              at: Date.now(),
+              name: "finalization-start",
+              elapsed,
+            });
             const finalized = await finalizeMp4(rawBlob, elapsed);
+            callbacks.current.onDiagnostics?.("phase", {
+              at: Date.now(),
+              name: "finalization-complete",
+            });
             blob = finalized.blob;
             if (finalized.duration != null) duration = finalized.duration;
           } catch (repairError) {
@@ -305,7 +387,11 @@ export default function CameraView({
             );
           }
           const { mediaDuration, ...metadata } = await inspectRecording(blob);
-          if (!needsRepair && (!/^video\/mp4(?:;|$)/i.test(blob.type)) && mediaDuration > 0)
+          if (
+            !needsRepair &&
+            !/^video\/mp4(?:;|$)/i.test(blob.type) &&
+            mediaDuration > 0
+          )
             duration = mediaDuration;
           const verified = Boolean(metadata.width && metadata.height);
           callbacks.current.onDiagnostics?.("export", {
@@ -317,8 +403,9 @@ export default function CameraView({
             duration,
             averageFileBitsPerSecond:
               duration > 0 ? Math.round((blob.size * 8) / duration) : null,
-            durationSource:
-              needsRepair ? "unverified capture timer" : "finalized media timeline",
+            durationSource: needsRepair
+              ? "unverified capture timer"
+              : "finalized media timeline",
             needsRepair,
             microphoneLevels,
           });
@@ -397,10 +484,16 @@ export default function CameraView({
   }
   useEffect(() => {
     mounted.current = true;
+    callbacks.current.onDiagnostics?.("camera-component", {
+      at: Date.now(),
+      event: "effect-mount",
+      cameraInstanceId: cameraInstance.current,
+    });
     let cancelled = false;
     let remembered = false;
     try {
-      remembered = localStorage.getItem("prompterson-camera-intro-complete") === "1";
+      remembered =
+        localStorage.getItem("prompterson-camera-intro-complete") === "1";
     } catch {
       // Permission checks still work when browser storage is unavailable.
     }
@@ -435,11 +528,16 @@ export default function CameraView({
     const pagehide = () => {
       cancelCountdown();
       stopRecording();
-      stopTracks();
+      stopTracks("pagehide");
     };
     document.addEventListener("visibilitychange", interrupted);
     window.addEventListener("pagehide", pagehide);
     return () => {
+      callbacks.current.onDiagnostics?.("camera-component", {
+        at: Date.now(),
+        event: "effect-cleanup",
+        cameraInstanceId: cameraInstance.current,
+      });
       cancelled = true;
       mounted.current = false;
       generation.current++;
@@ -448,7 +546,7 @@ export default function CameraView({
       stopMeter.current?.();
       stopMeter.current = null;
       output.current?.cleanup();
-      stopTracks();
+      stopTracks("component-effect-cleanup");
       wake.current?.release().catch(() => {});
       document.removeEventListener("visibilitychange", interrupted);
       window.removeEventListener("pagehide", pagehide);
@@ -570,7 +668,7 @@ export default function CameraView({
     <main className="camera-stage">
       <div className="camera-frame">
         <video
-          ref={video}
+          ref={bindPreview}
           className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
           style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {
