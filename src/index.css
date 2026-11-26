@@ -1613,3 +1613,11 @@ html[data-camera-simple="1"] .camera-vignette {
 html[data-camera-simple="1"] .camera-preview.mirrored {
   transform: scaleX(-1);
 }
+
+/* Restore video framing scale while keeping parent and overlay simplified. */
+html[data-camera-simple="1"] .camera-preview {
+  transform: scale(var(--framing-scale, 1));
+}
+html[data-camera-simple="1"] .camera-preview.mirrored {
+  transform: scale(var(--framing-scale, 1)) scaleX(-1);
+}
