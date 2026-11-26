@@ -1608,3 +1608,8 @@ html[data-camera-simple="1"] .camera-preview.mirrored {
 html[data-camera-simple="1"] .camera-vignette {
   display: none;
 }
+
+/* Restore only selfie mirroring for the next isolation test. */
+html[data-camera-simple="1"] .camera-preview.mirrored {
+  transform: scaleX(-1);
+}
