@@ -669,7 +669,7 @@ export default function CameraView({
       <div className="camera-frame">
         <video
           ref={bindPreview}
-          className={`camera-preview ${settings.mirror && front ? "mirrored" : ""}`}
+          className={`camera-preview ${settings.mirror && front ? "mirrored" : ""} ${settings.framing === "zoomed-out" ? "full-view" : ""}`}
           style={{ "--framing-scale": framingScale(settings.framing) }}
           onResize={() => {
             const take = output.current;
@@ -866,6 +866,7 @@ export default function CameraView({
               value={settings.framing}
               onChange={(e) => updateSettings({ framing: e.target.value })}
             >
+              <option value="zoomed-out">Zoomed Out</option>
               <option value="standard">Standard</option>
               <option value="close-up">Close-Up</option>
             </select>
