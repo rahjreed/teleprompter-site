@@ -97,6 +97,15 @@ export async function requestCamera(
     channelCount: { ideal: 1 },
     sampleRate: { ideal: 48000 },
   };
+  // Match the successful standalone Android camera test exactly.
+  if (/Android/i.test(globalThis.navigator?.userAgent || "")) {
+    return devices.getUserMedia({
+      audio: true,
+      video: settings.deviceId
+        ? { deviceId: { exact: settings.deviceId } }
+        : { facingMode: settings.facing || "user" },
+    });
+  }
   const frameRate = { ideal: 30, max: 30 };
   try {
     return await resetCameraZoom(
