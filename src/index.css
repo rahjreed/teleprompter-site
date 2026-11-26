@@ -1631,3 +1631,8 @@ html[data-camera-simple="1"] .camera-frame {
   margin: 0;
   transform: translate(-50%, -50%);
 }
+
+/* Final isolation test: restore the original gradient overlay. */
+html[data-camera-simple="1"] .camera-vignette {
+  display: block;
+}
