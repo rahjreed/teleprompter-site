@@ -190,6 +190,20 @@ async function resetCameraZoom(stream) {
 }
 export const framingScale = (framing) => (framing === "close-up" ? 1.2 : 1);
 
+// Fit the whole available camera feed inside a portrait frame without
+// stretching pixels or asking the camera driver to switch lenses.
+export function fitFullCameraFrame(sourceWidth, sourceHeight, width, height) {
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const fittedWidth = sourceWidth * scale;
+  const fittedHeight = sourceHeight * scale;
+  return {
+    x: (width - fittedWidth) / 2,
+    y: (height - fittedHeight) / 2,
+    width: fittedWidth,
+    height: fittedHeight,
+  };
+}
+
 function portraitCrop(width, height, zoom) {
   const cropWidth = Math.min(width, (height * 9) / 16) / zoom;
   const cropHeight = (cropWidth * 16) / 9;
@@ -208,9 +222,16 @@ export function portraitStream(video, source, quality, framing, report) {
   if (!sw || !sh)
     throw new Error("Camera is warming up. Try recording again in a moment.");
   const zoom = framingScale(framing);
-  const crop = portraitCrop(sw, sh, zoom);
-  // Prefer Full HD, then HD, then the largest even 9:16 frame the crop supports.
-  const available = Math.min(Number(quality), crop.width);
+  const fullView = framing === "zoomed-out";
+  const crop = fullView
+    ? { x: 0, y: 0, width: sw, height: sh }
+    : portraitCrop(sw, sh, zoom);
+  // Keep the existing output resolution rules. A full-view preset changes
+  // composition, not the selected video quality or the source camera.
+  const available = Math.min(
+    Number(quality),
+    fullView ? portraitCrop(sw, sh, 1).width : crop.width,
+  );
   const width =
     available >= 1080
       ? 1080
@@ -284,7 +305,21 @@ export function portraitStream(video, source, quality, framing, report) {
       width: cropWidth,
       height: cropHeight,
     } = portraitCrop(sourceWidth, sourceHeight, zoom);
-    context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
+    if (fullView) {
+      // The native camera may be wider than 9:16. Preserve its entire field
+      // of view and fill the unused portrait space with a neutral border.
+      // Use this same composition as the CSS object-fit: contain preview.
+      const fit = fitFullCameraFrame(sourceWidth, sourceHeight, width, height);
+      context.fillStyle = "#141416";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(
+        video,
+        0, 0, sourceWidth, sourceHeight,
+        fit.x, fit.y, fit.width, fit.height,
+      );
+    } else {
+      context.drawImage(video, x, y, cropWidth, cropHeight, 0, 0, width, height);
+    }
     if (manualFrames) canvasTrack.requestFrame();
     framesDrawn++;
     if (trigger === "timer") fallbackDraws++;
@@ -316,7 +351,7 @@ export function portraitStream(video, source, quality, framing, report) {
     stream,
     width,
     height,
-    path: "center crop",
+    path: fullView ? "full view" : "center crop",
     crop,
     get framesDrawn() {
       return framesDrawn;
@@ -326,7 +361,12 @@ export function portraitStream(video, source, quality, framing, report) {
         framesDrawn,
         fallbackDraws,
         lastDrawAt,
-        currentCrop: portraitCrop(video.videoWidth, video.videoHeight, zoom),
+        currentCrop: fullView
+          ? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight }
+          : portraitCrop(video.videoWidth, video.videoHeight, zoom),
+        fullViewFit: fullView && video.videoWidth && video.videoHeight
+          ? fitFullCameraFrame(video.videoWidth, video.videoHeight, width, height)
+          : null,
         width,
         height,
         manualFrames,
