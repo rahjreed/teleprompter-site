@@ -118,6 +118,7 @@ export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
   report,
+  environment = globalThis.navigator,
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -152,7 +153,7 @@ export async function requestCamera(
     sampleRate: { ideal: 48000 },
   };
   // Match the successful standalone Android camera test exactly.
-  if (/Android/i.test(globalThis.navigator?.userAgent || "")) {
+  if (/Android/i.test(environment?.userAgent || "")) {
     return acquire({
       audio: true,
       video: settings.deviceId
@@ -161,7 +162,7 @@ export async function requestCamera(
     });
   }
   const frameRate = { ideal: 30, max: 30 };
-  const threeFour = wantsIOSThreeFour(settings);
+  const threeFour = wantsIOSThreeFour(settings, environment);
   try {
     return await resetCameraZoom(
       await acquire({
