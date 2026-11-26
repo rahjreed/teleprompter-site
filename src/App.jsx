@@ -37,7 +37,7 @@ import {
   remove,
   storageStatus,
 } from "./storage";
-import { busy, fileName, formatTime, videoMimeType } from "./media";
+import { busy, fileName, formatTime, supportedFraming, videoMimeType, isAppleCamera } from "./media";
 import { isAppleMobile, saveRecordingToDevice } from "./videoSave";
 import { finalizeMp4 } from "./mp4Repair";
 import { inspectRecording } from "./media";
@@ -239,6 +239,7 @@ export default function App() {
           s = [starter];
         }
         const next = { ...defaults, ...pref, initialized: true };
+        next.framing = supportedFraming(next.framing);
         await put("preferences", { ...next, id: "settings" });
         if (mounted) {
           setScripts(s);
@@ -278,6 +279,7 @@ export default function App() {
   }, [recordState, videos, saveState]);
   function updateSettings(patch) {
     const next = { ...settingsRef.current, ...patch };
+    next.framing = supportedFraming(next.framing);
     settingsRef.current = next;
     setSettings(next);
     track(
@@ -966,11 +968,11 @@ export default function App() {
                   value={settings.framing}
                   onChange={(e) => updateSettings({ framing: e.target.value })}
                 >
-                  <option value="zoomed-out">Zoomed Out</option>
+                  {!isAppleCamera() && <option value="zoomed-out">Zoomed Out</option>}
                   <option value="standard">Standard</option>
                   <option value="close-up">Close-Up</option>
                 </select>
-                {settings.framing === "zoomed-out" && (
+                {!isAppleCamera() && settings.framing === "zoomed-out" && (
                   <small className="fine-print">
                     On iPhone, prefers a wider 3:4 camera picture; other devices use their available camera view.
                     Some borders may remain in 9:16 video. This does not activate an ultrawide lens.

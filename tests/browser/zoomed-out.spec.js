@@ -84,112 +84,59 @@ test("Zoomed Out preview and saved 9:16 video include the whole camera picture",
 });
 
 
-test.describe("iPhone 3:4 Zoomed Out camera target", () => {
+test.describe("iOS Zoomed Out is disabled", () => {
   test.use({
     userAgent:
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
   });
 
-  test("switching presets reacquires 3:4 camera and square fallback matches saved video", async ({ page }) => {
-    test.setTimeout(80000);
-    await page.addInitScript(() => {
-      window.iphoneCameraRequests = [];
-      navigator.mediaDevices.getUserMedia = async (constraints) => {
-        window.iphoneCameraRequests.push(constraints);
-        // Safari can ignore ideal aspect ratio: deliberately return a square.
-        const canvas = document.createElement("canvas");
-        canvas.width = 1920;
-        canvas.height = 1920;
-        const ctx = canvas.getContext("2d");
-        let frames = 0;
-        const draw = () => {
-          ctx.fillStyle = "#e88015";
-          ctx.fillRect(0, 0, 1920, 1920);
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(810 + (++frames % 100), 800, 40, 40);
-        };
-        draw();
-        const stream = canvas.captureStream(30);
-        const timer = setInterval(draw, 33);
-        const originalStop = stream.getVideoTracks()[0].stop.bind(stream.getVideoTracks()[0]);
-        stream.getVideoTracks()[0].stop = () => {
-          clearInterval(timer);
-          originalStop();
-        };
-        const audio = new AudioContext();
-        const oscillator = audio.createOscillator();
-        const destination = audio.createMediaStreamDestination();
-        oscillator.connect(destination);
-        oscillator.start();
-        await audio.resume();
-        stream.addTrack(destination.stream.getAudioTracks()[0]);
-        return stream;
-      };
-    });
+  test("hides Zoomed Out and resets previously saved iPhone selection to Standard", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("combobox", { name: /Countdown/ }).selectOption("0");
+    const framing = page.getByRole("combobox", { name: /Recording framing/ });
+    await expect(framing).toHaveValue("standard");
+    await expect(framing.locator('option[value="zoomed-out"]')).toHaveCount(0);
+    await expect(framing.locator('option[value="close-up"]')).toHaveCount(1);
     await page.getByRole("button", { name: "Close dialog" }).click();
-    await page.getByRole("button", { name: "Open camera", exact: true }).click();
-    await page.getByRole("button", { name: "Enable camera & mic" }).click();
-    await expect(page.getByRole("button", { name: "Start recording", exact: true }))
-      .toBeEnabled({ timeout: 15000 });
 
-    await page.getByRole("button", { name: "Adjust teleprompter" }).click();
-    await page.getByRole("combobox", { name: /Recording framing/ })
-      .selectOption("zoomed-out");
-    await page.getByRole("button", { name: "Close studio controls" }).click();
-
-    await expect(page.getByRole("button", { name: "Start recording", exact: true }))
-      .toBeEnabled({ timeout: 15000 });
-    const preview = page.locator("video.camera-preview");
-    await expect(preview).toHaveClass(/ios-three-four/);
-    await expect(preview).toHaveCSS("object-fit", "cover");
-    const widths = await page.evaluate(() =>
-      window.iphoneCameraRequests.map((c) => ({
-        width: c.video.width?.ideal,
-        height: c.video.height?.ideal,
-        ratio: c.video.aspectRatio?.ideal,
-      })),
-    );
-    expect(widths).toEqual([
-      { width: 1920, height: 1920, ratio: undefined },
-      { width: 1440, height: 1920, ratio: 0.75 },
-    ]);
-    const fraction = await page.evaluate(() => {
-      const frame = document.querySelector(".camera-frame");
-      const preview = document.querySelector(".camera-preview");
-      return preview.getBoundingClientRect().height / frame.getBoundingClientRect().height;
+    // Simulate the Zoomed Out selection retained by previous releases.
+    await page.evaluate(async () => {
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("callista-teleprompter", 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction("preferences", "readwrite");
+        const store = tx.objectStore("preferences");
+        const request = store.get("settings");
+        request.onsuccess = () =>
+          store.put({ ...request.result, id: "settings", framing: "zoomed-out" });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
     });
-    expect(fraction).toBeCloseTo(0.75, 2);
-
-    await page.getByRole("button", { name: "Start recording", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Stop recording", exact: true }))
-      .toBeEnabled({ timeout: 10000 });
-    await page.waitForTimeout(2200);
-    await page.getByRole("button", { name: "Stop recording", exact: true }).click();
-    await expect(page.locator("video.playback")).toBeVisible({ timeout: 25000 });
-    const result = await page.locator("video.playback").evaluate(async (video) => {
-      await video.play();
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0);
-      return {
-        width: canvas.width,
-        height: canvas.height,
-        top: [...ctx.getImageData(canvas.width / 2, 10, 1, 1).data],
-        center: [...ctx.getImageData(canvas.width / 2, canvas.height / 2, 1, 1).data],
-        bottom: [...ctx.getImageData(canvas.width / 2, canvas.height - 10, 1, 1).data],
-      };
+    await page.reload();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const restored = page.getByRole("combobox", { name: /Recording framing/ });
+    await expect(restored).toHaveValue("standard");
+    await expect(restored.locator('option[value="zoomed-out"]')).toHaveCount(0);
+    const stored = await page.evaluate(async () => {
+      const db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open("callista-teleprompter", 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      const framing = await new Promise((resolve, reject) => {
+        const tx = db.transaction("preferences", "readonly");
+        const req = tx.objectStore("preferences").get("settings");
+        req.onsuccess = () => resolve(req.result.framing);
+        req.onerror = () => reject(req.error);
+      });
+      db.close();
+      return framing;
     });
-    expect(result.width).toBe(1080);
-    expect(result.height).toBe(1920);
-    expect(result.top[0]).toBeLessThan(60);
-    expect(result.bottom[0]).toBeLessThan(60);
-    expect(result.center[0]).toBeGreaterThan(120);
-    await page.getByRole("button", { name: "Close dialog" }).click();
+    expect(stored).toBe("standard");
   });
 });
