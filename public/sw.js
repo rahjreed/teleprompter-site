@@ -13,7 +13,9 @@ self.addEventListener("install", (event) => {
       const brandAssets = [
         "icon-192.png",
         "icon-512.png",
-        "icon-maskable-v2.png",
+        "icon-maskable-v3.png",
+        "launcher-v3-192.png",
+        "launcher-v3-512.png",
         "apple-touch-icon.png",
         "favicon.ico",
         "icon-16.png",
