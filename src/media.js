@@ -93,10 +93,32 @@ export async function cameraPermission(permissions = globalThis.navigator?.permi
   return states.every((state) => state === "granted") ? "granted" : "unknown";
 }
 
+// iOS Safari and iOS Chrome share WebKit camera behavior. Request a 3:4
+// source for Zoomed Out instead of the square source used by other presets.
+export function isAppleCamera(nav = globalThis.navigator) {
+  return /iPhone|iPad|iPod/i.test(nav?.userAgent || "") ||
+    (nav?.platform === "MacIntel" && (nav?.maxTouchPoints || 0) > 1);
+}
+
+export function wantsIOSThreeFour(settings, nav = globalThis.navigator) {
+  return settings?.framing === "zoomed-out" && isAppleCamera(nav);
+}
+
+export function zoomedOutCrop(width, height, nav = globalThis.navigator) {
+  // Some iPhone camera modes still return 1:1 despite ideal constraints.
+  // Preserve a wider 3:4 picture instead of letterboxing the whole square.
+  if (isAppleCamera(nav) && width / height > 3 / 4) {
+    const cropWidth = (height * 3) / 4;
+    return { x: (width - cropWidth) / 2, y: 0, width: cropWidth, height };
+  }
+  return { x: 0, y: 0, width, height };
+}
+
 export async function requestCamera(
   settings,
   devices = navigator.mediaDevices,
   report,
+  environment = globalThis.navigator,
 ) {
   if (!devices?.getUserMedia)
     throw new Error(
@@ -131,7 +153,7 @@ export async function requestCamera(
     sampleRate: { ideal: 48000 },
   };
   // Match the successful standalone Android camera test exactly.
-  if (/Android/i.test(globalThis.navigator?.userAgent || "")) {
+  if (/Android/i.test(environment?.userAgent || "")) {
     return acquire({
       audio: true,
       video: settings.deviceId
@@ -140,14 +162,16 @@ export async function requestCamera(
     });
   }
   const frameRate = { ideal: 30, max: 30 };
+  const threeFour = wantsIOSThreeFour(settings, environment);
   try {
     return await resetCameraZoom(
       await acquire({
         audio,
         video: {
           ...selection,
-          width: { ideal: longEdge },
+          width: { ideal: threeFour ? Math.round(longEdge * 3 / 4) : longEdge },
           height: { ideal: longEdge },
+          ...(threeFour ? { aspectRatio: { ideal: 3 / 4 } } : {}),
           resizeMode: { exact: "none" },
           frameRate,
         },
@@ -158,13 +182,22 @@ export async function requestCamera(
     return resetCameraZoom(
       await acquire({
         audio,
-        video: {
-          facingMode: { ideal: settings.facing },
-          width: { ideal: 1280 },
-          height: { ideal: 1280 },
-          resizeMode: { ideal: "none" },
-          frameRate,
-        },
+        video: threeFour
+          ? {
+              ...selection,
+              width: { ideal: 960 },
+              height: { ideal: 1280 },
+              aspectRatio: { ideal: 3 / 4 },
+              resizeMode: { ideal: "none" },
+              frameRate,
+            }
+          : {
+              facingMode: { ideal: settings.facing },
+              width: { ideal: 1280 },
+              height: { ideal: 1280 },
+              resizeMode: { ideal: "none" },
+              frameRate,
+            },
       }),
     );
   }
@@ -224,7 +257,7 @@ export function portraitStream(video, source, quality, framing, report) {
   const zoom = framingScale(framing);
   const fullView = framing === "zoomed-out";
   const crop = fullView
-    ? { x: 0, y: 0, width: sw, height: sh }
+    ? zoomedOutCrop(sw, sh)
     : portraitCrop(sw, sh, zoom);
   // Keep the existing output resolution rules. A full-view preset changes
   // composition, not the selected video quality or the source camera.
@@ -309,12 +342,13 @@ export function portraitStream(video, source, quality, framing, report) {
       // The native camera may be wider than 9:16. Preserve its entire field
       // of view and fill the unused portrait space with a neutral border.
       // Use this same composition as the CSS object-fit: contain preview.
-      const fit = fitFullCameraFrame(sourceWidth, sourceHeight, width, height);
+      const view = zoomedOutCrop(sourceWidth, sourceHeight);
+      const fit = fitFullCameraFrame(view.width, view.height, width, height);
       context.fillStyle = "#141416";
       context.fillRect(0, 0, width, height);
       context.drawImage(
         video,
-        0, 0, sourceWidth, sourceHeight,
+        view.x, view.y, view.width, view.height,
         fit.x, fit.y, fit.width, fit.height,
       );
     } else {
@@ -362,10 +396,13 @@ export function portraitStream(video, source, quality, framing, report) {
         fallbackDraws,
         lastDrawAt,
         currentCrop: fullView
-          ? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight }
+          ? zoomedOutCrop(video.videoWidth, video.videoHeight)
           : portraitCrop(video.videoWidth, video.videoHeight, zoom),
         fullViewFit: fullView && video.videoWidth && video.videoHeight
-          ? fitFullCameraFrame(video.videoWidth, video.videoHeight, width, height)
+          ? (() => {
+              const view = zoomedOutCrop(video.videoWidth, video.videoHeight);
+              return fitFullCameraFrame(view.width, view.height, width, height);
+            })()
           : null,
         width,
         height,

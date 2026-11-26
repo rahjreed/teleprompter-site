@@ -972,8 +972,8 @@ export default function App() {
                 </select>
                 {settings.framing === "zoomed-out" && (
                   <small className="fine-print">
-                    Shows the entire available camera picture in a 9:16 video.
-                    Dark borders may appear; this does not activate an ultrawide lens.
+                    On iPhone, prefers a wider 3:4 camera picture; other devices use their available camera view.
+                    Some borders may remain in 9:16 video. This does not activate an ultrawide lens.
                   </small>
                 )}
               </label>
