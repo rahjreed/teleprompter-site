@@ -9,6 +9,7 @@ import {
   framingScale,
   fitFullCameraFrame,
   isAppleCamera,
+  supportedFraming,
   wantsIOSThreeFour,
   zoomedOutCrop,
   mediaError,
@@ -71,14 +72,18 @@ test("Zoomed Out fits the full camera image into 9:16 without distortion", () =>
   assert.ok(wide.height < 700);
 });
 
-test("iPhone Zoomed Out requests 3:4 without changing other presets", async () => {
+test("Zoomed Out is temporarily unsupported on iOS, with Standard fallback", async () => {
   const iphone = { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" };
   const ipad = { platform: "MacIntel", maxTouchPoints: 5 };
   const android = { userAgent: "Mozilla/5.0 (Linux; Android 14; SM-S916B)" };
   assert.equal(isAppleCamera(iphone), true);
   assert.equal(isAppleCamera(ipad), true);
   assert.equal(isAppleCamera(android), false);
-  assert.equal(wantsIOSThreeFour({ framing: "zoomed-out" }, iphone), true);
+  assert.equal(supportedFraming("zoomed-out", iphone), "standard");
+  assert.equal(supportedFraming("zoomed-out", ipad), "standard");
+  assert.equal(supportedFraming("close-up", iphone), "close-up");
+  assert.equal(supportedFraming("zoomed-out", android), "zoomed-out");
+  assert.equal(wantsIOSThreeFour({ framing: "zoomed-out" }, iphone), false);
   assert.equal(wantsIOSThreeFour({ framing: "standard" }, iphone), false);
   assert.equal(wantsIOSThreeFour({ framing: "zoomed-out" }, android), false);
   let constraints;
@@ -88,14 +93,11 @@ test("iPhone Zoomed Out requests 3:4 without changing other presets", async () =
   } };
   const zoomed = { quality: "1080", facing: "user", framing: "zoomed-out" };
   await requestCamera(zoomed, devices, undefined, iphone);
-  assert.equal(constraints.video.width.ideal, 1440);
-  assert.equal(constraints.video.height.ideal, 1920);
-  assert.deepEqual(constraints.video.aspectRatio, { ideal: 3 / 4 });
-  assert.deepEqual(constraints.video.resizeMode, { exact: "none" });
-  await requestCamera({ ...zoomed, framing: "standard" }, devices, undefined, iphone);
   assert.equal(constraints.video.width.ideal, 1920);
   assert.equal(constraints.video.height.ideal, 1920);
   assert.equal(constraints.video.aspectRatio, undefined);
+  await requestCamera({ ...zoomed, framing: "close-up" }, devices, undefined, iphone);
+  assert.equal(constraints.video.width.ideal, 1920);
   await requestCamera(zoomed, devices, undefined, android);
   assert.equal(constraints.video.facingMode, "user");
   assert.equal(constraints.video.aspectRatio, undefined);
