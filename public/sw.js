@@ -15,9 +15,12 @@ self.addEventListener("install", (event) => {
         "icon-512.png",
         "icon-maskable.png",
         "apple-touch-icon.png",
-        "favicon.svg",
-        "mascot.svg",
-      ].map((file) => new URL(`brand/prompterson/${file}`, base).href);
+        "favicon.ico",
+        "icon-16.png",
+        "icon-32.png",
+        "icon-48.png",
+        "icon-1024.png",
+      ].map((file) => new URL(`brand/prompterson/approved-v1/${file}`, base).href);
       await cache.addAll(
         [
           ...assets,
