@@ -1,11 +1,13 @@
-# Approved Mr. Prompterson artwork
+# Launcher artwork — November 26, 2026
 
-`prompterson/approved-v1/` contains the definitive artwork supplied in `mr-prompterson-assets.zip` on November 25, 2026. The master, favicon and supplied size variants are preserved byte-for-byte. `scripts/approved-brand-assets.json` records their SHA-256 hashes.
+`prompterson/launcher-v4/approved-master.png` is an exact copy of the new approved attachment. Standard launcher, favicon and Apple outputs are proportional, full-bleed resizes; no borders, frames, recoloring or new facial details are drawn. Sizes: 16, 32, 48, 180, 192, 512 and 1024 pixels, plus a multi-resolution ICO.
 
-The header uses the approved 192px image; welcome, pre-permission camera onboarding and About use the supplied 512px image. No branding is added to the live preview or recorded video. The existing tagline, layout and attribution are retained.
+The Android maskable derivative uses the largest centered even image size that keeps the measured red, silver, white and eyewear features inside the 40%-radius safe circle with 2px clearance. This is 358px within 512px (77px per side), versus the previous 280px tile. Only peripheral charcoal background is extended to fill the canvas. The artwork remains complete and proportionally scaled; the normal/Apple icons have no padding.
 
-`generate-brand-icons.mjs`, run by dev/build, verifies approved hashes/dimensions and copies the supplied 180px icon to the Apple touch filename. It does not draw artwork. `render-brand-icons.mjs` only creates the committed 512px maskable derivative: the complete approved image is scaled proportionally to 280px and centered on black with 116px padding. The entire image, including its square corners, fits within Android's central 40%-radius safe circle. Nothing is cropped or redrawn.
+The previous `prompterson/approved-v1/` files remain unchanged as a backup. The human `prompterson/mascot.svg` and all welcome, About and pre-permission onboarding mascot references remain unchanged. The header uses the new app icon.
 
-The favicon uses the supplied ICO plus 16px/32px PNG variants. Social cards use the supplied 1024px image with square-card metadata. Asset URLs have a new `approved-v1` namespace. The existing content-hashed service-worker generation includes these files, precaches all used app/install assets and safely replaces only obsolete app-shell caches after activation. It does not delete IndexedDB, localStorage, scripts, recordings or preferences.
+Explicit asset regeneration uses `node scripts/render-brand-icons.mjs` with the existing Playwright dependency. It checks the approved master hash, writes the resized derivatives and records their SHA-256 hashes in `scripts/launcher-v4-assets.json`. Normal dev/build calls only validate the committed outputs and old approved backup: they never render old artwork or overwrite either set of files.
 
-Existing users can close all app windows and reopen after the update-ready notice. OS launchers may refresh installed names/icons later than page assets. Do not uninstall or clear site data to force an icon refresh: this can lose locally stored recordings and scripts. No reinstall is required for the app update.
+Manifest, Apple touch, favicon, header and social-image URLs now use `launcher-v4`. The existing content-hashed service worker includes the new icons and still precaches the same human mascot. Its existing safe update/activation behavior and all user data stores are unchanged. Social metadata uses the canonical production image URL, which will become available only after the approved production release.
+
+Close all app windows and reopen after an update-ready notice. OS launchers may update installed icons later than browser assets. Do not clear site data or uninstall to force a refresh; this can erase local scripts and recordings. A reinstall is not required for the application update.

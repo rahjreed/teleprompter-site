@@ -1,0 +1,24 @@
+{
+  "sourceSha256": "496cfadb6ab0a5340e6c8f52b89185a1f114727c4d0a99353dbf75bd40752b84",
+  "files": {
+    "approved-master.png": "496cfadb6ab0a5340e6c8f52b89185a1f114727c4d0a99353dbf75bd40752b84",
+    "icon-16.png": "86598585c0de95b82a09f44c38eda8fb61c54ca2df2fe945ab462b5f32444c5d",
+    "icon-32.png": "cf0938f6cf1e9f28edbb9e65d96301c7283c1d5e5d7bcb334bbd1a70d4eeb84c",
+    "icon-48.png": "8b10ffbf725e234cf4e87739d01a1a36c477434d1d6f7a091cbad31e7e15494c",
+    "icon-180.png": "d20791ae64bb02376e34fdaa78270004997eeb02d63ffeefdb50831db861c1d4",
+    "icon-192.png": "6d780c4e472942cfa3a818eca05f7ec3056cfa5b9c8603d121c234858a964293",
+    "icon-512.png": "aca6c2798420d66b8b81778395a8edde6fbcf54e2a4ae318f64ce6ee4e32d251",
+    "icon-1024.png": "5484d894bfa4b96516762115762031f4f20e919e9e6765095ed2fca998b14911",
+    "icon-maskable.png": "a64206b20ad91293760b76ffce58ac65549eaa0fd86c8d465baa9dc1188d1f02",
+    "apple-touch-icon.png": "d20791ae64bb02376e34fdaa78270004997eeb02d63ffeefdb50831db861c1d4",
+    "favicon.ico": "74c4f29fe3b2f6ae08a2514a96e9630209130252d5594dd1a1c82f0fc413b0b4"
+  },
+  "maskable": {
+    "size": 512,
+    "artworkSize": 358,
+    "inset": 77,
+    "safeRadius": 204.8,
+    "safetyMargin": 2,
+    "sourceFeatureRadius": 709.431110115704
+  }
+}
