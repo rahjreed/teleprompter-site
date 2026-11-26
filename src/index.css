@@ -944,6 +944,14 @@ select {
 .camera-preview.full-view {
   object-fit: contain;
 }
+/* When iOS returns a square feed, show the same centered 3:4 crop
+   that the Zoomed Out recording exports. No zoom or lens change. */
+.camera-preview.full-view.ios-three-four {
+  top: 12.5%;
+  bottom: auto;
+  height: 75%;
+  object-fit: cover;
+}
 .camera-preview.mirrored {
   transform: scale(var(--framing-scale, 1)) scaleX(-1);
 }
