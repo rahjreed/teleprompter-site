@@ -13,7 +13,7 @@ self.addEventListener("install", (event) => {
       const brandAssets = [
         "icon-192.png",
         "icon-512.png",
-        "icon-maskable.png",
+        "icon-maskable-v2.png",
         "apple-touch-icon.png",
         "favicon.ico",
         "icon-16.png",
@@ -26,6 +26,7 @@ self.addEventListener("install", (event) => {
           ...assets,
           new URL("manifest.webmanifest", base).href,
           ...brandAssets,
+          new URL("brand/prompterson/mascot.svg", base).href,
         ].map((url) => new Request(url, { cache: "reload" })),
       );
       await cache.put(base, response);
