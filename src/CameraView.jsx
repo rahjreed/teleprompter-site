@@ -135,6 +135,35 @@ export default function CameraView({
       );
       video.current.srcObject = stream;
       await video.current.play();
+      // Android preview diagnostics: observe playback without changing recording.
+      if (/Android/i.test(navigator.userAgent)) {
+        const element = video.current;
+        const track = stream.getVideoTracks()[0];
+        let frames = 0, last = performance.now(), handle;
+        const tick = () => {
+          if (source.current !== stream || !element.isConnected) return;
+          frames++;
+          last = performance.now();
+          handle = element.requestVideoFrameCallback(tick);
+        };
+        if (element.requestVideoFrameCallback)
+          handle = element.requestVideoFrameCallback(tick);
+        const monitor = setInterval(() => {
+          if (source.current !== stream || !element.isConnected) {
+            clearInterval(monitor);
+            if (handle != null) element.cancelVideoFrameCallback?.(handle);
+            return;
+          }
+          callbacks.current.onDiagnostics?.("previewHealth", {
+            frames, frameAgeMs: Math.round(performance.now() - last),
+            paused: element.paused, currentTime: element.currentTime,
+            readyState: element.readyState, trackState: track.readyState,
+            muted: track.muted, sameStream: element.srcObject === stream,
+            settings: track.getSettings(),
+          });
+        }, 1000);
+      }
+
       if (!mounted.current || token !== generation.current) return;
       if (onDiagnostics)
         onDiagnostics("capture", captureDetails(stream, video.current));
