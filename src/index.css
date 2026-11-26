@@ -941,6 +941,9 @@ select {
   object-fit: cover;
   transform: scale(var(--framing-scale, 1));
 }
+.camera-preview.full-view {
+  object-fit: contain;
+}
 .camera-preview.mirrored {
   transform: scale(var(--framing-scale, 1)) scaleX(-1);
 }
